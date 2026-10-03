@@ -119,7 +119,8 @@ export async function readPost(siteDir: string, id: string): Promise<PostDetail>
   return {
     ...metaFrom(id, kind, raw, parsed.content, data, stat.mtimeMs),
     raw,
-    content: parsed.content
+    content: parsed.content,
+    frontMatter: data
   }
 }
 
@@ -190,6 +191,16 @@ export async function savePost(siteDir: string, id: string, patch: PostPatch): P
   if (patch.categories !== undefined) {
     if (patch.categories.length) data.categories = patch.categories
     else delete data.categories
+  }
+
+  // 自定义 front-matter 字段：null 表示删除该键，其余按字符串写入
+  if (patch.extra) {
+    for (const [key, value] of Object.entries(patch.extra)) {
+      // 保护内置字段不被自定义参数误删/误写
+      if (key === 'title' || key === 'date' || key === 'tags' || key === 'categories') continue
+      if (value === null || value === '') delete data[key]
+      else data[key] = value
+    }
   }
 
   const content = patch.content !== undefined ? patch.content : parsed.content

@@ -9,6 +9,8 @@ import {
   NInputNumber,
   NPopconfirm,
   NProgress,
+  NRadioButton,
+  NRadioGroup,
   NSelect,
   NSpace,
   NSwitch,
@@ -784,10 +786,16 @@ watch(activeTab, (tab) => {
           <div class="panel-title">外观与编辑</div>
           <div class="form-narrow">
             <n-form label-placement="left" :label-width="110">
-              <n-form-item label="暗色主题">
+              <n-form-item label="界面主题">
                 <n-space align="center">
-                  <n-switch :value="ui.isDark" @update:value="ui.setDark" />
-                  <span class="muted small">深空黑 + 霓虹青蓝（也可用左下角 ☾/☀ 按钮切换）</span>
+                  <n-radio-group :value="ui.themeMode" size="small" @update:value="ui.setThemeMode">
+                    <n-radio-button value="light">亮色</n-radio-button>
+                    <n-radio-button value="dark">暗色</n-radio-button>
+                    <n-radio-button value="system">跟随系统</n-radio-button>
+                  </n-radio-group>
+                  <span class="muted small">
+                    {{ ui.themeMode === 'system' ? '随系统亮暗自动切换（也可点左下角 ◐/☀/☾ 循环切换）' : '固定主题，不随系统变化' }}
+                  </span>
                 </n-space>
               </n-form-item>
               <n-form-item label="自动保存延迟">

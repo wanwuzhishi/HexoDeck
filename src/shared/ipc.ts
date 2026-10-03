@@ -17,6 +17,15 @@ export interface PostMeta {
 export interface PostDetail extends PostMeta {
   raw: string
   content: string
+  /** 完整 front-matter（含自定义字段），供参数侧栏展示与编辑 */
+  frontMatter: Record<string, unknown>
+}
+
+/** 自定义 front-matter 字段（参数侧栏可增删） */
+export interface CustomField {
+  key: string
+  /** 值的字符串形式；布尔/数字原样保留由 YAML 序列化决定 */
+  value: string
 }
 
 /** 正文搜索命中项 */
@@ -31,6 +40,11 @@ export interface PostPatch {
   tags?: string[]
   categories?: string[]
   content?: string
+  /**
+   * 自定义 front-matter 字段：写入时合并到现有元数据。
+   * value 为 null 表示删除该键。
+   */
+  extra?: Record<string, string | null>
 }
 
 export interface SiteInfo {

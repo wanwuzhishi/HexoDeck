@@ -168,6 +168,30 @@ async function main(): Promise<void> {
 
   const pl = await listPlugins(tmpSite)
   check('插件识别', pl.some((p) => p.name === 'hexo-renderer-marked'))
+  // 10. 自定义 front-matter 字段（文章参数侧栏）
+  const cf = await createPost(tmpSite, 'post', '自定义字段测试')
+  await savePost(tmpSite, cf.id, { extra: { permalink: 'my-link', cover: 'a.jpg', sticky: '10' } })
+  const cfRead = await readPost(tmpSite, cf.id)
+  check(
+    '自定义字段写入并回读',
+    cfRead.frontMatter.permalink === 'my-link' &&
+      cfRead.frontMatter.cover === 'a.jpg' &&
+      cfRead.frontMatter.sticky === '10',
+    JSON.stringify(cfRead.frontMatter)
+  )
+  // 传 null 表示删除该键
+  await savePost(tmpSite, cf.id, { extra: { permalink: null, cover: null, sticky: null } })
+  const cfClean = await readPost(tmpSite, cf.id)
+  check(
+    '自定义字段可删除',
+    !('permalink' in cfClean.frontMatter) && !('cover' in cfClean.frontMatter),
+    JSON.stringify(cfClean.frontMatter)
+  )
+  // 内置字段不应被 extra 覆盖
+  await savePost(tmpSite, cf.id, { extra: { title: 'HACKED', date: 'HACKED' } })
+  const cfGuard = await readPost(tmpSite, cf.id)
+  check('内置字段不被自定义参数覆盖', cfGuard.title === '自定义字段测试', cfGuard.title)
+  await deletePost(tmpSite, cf.id, async () => { throw new Error('no trash') })
   await fs.rm(tmpParent, { recursive: true, force: true })
 
   // 7. 生成静态页面（增量构建：无变更时输出 0 个文件，属正常）

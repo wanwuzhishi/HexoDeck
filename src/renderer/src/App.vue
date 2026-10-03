@@ -38,6 +38,18 @@ const menuOptions: MenuOption[] = [
 
 const activeKey = computed(() => (route.path.startsWith('/editor') ? '/posts' : route.path))
 
+/** 主题按钮：三态循环 亮色 → 暗色 → 跟随系统 */
+const themeButtonIcon = computed(() => {
+  if (ui.themeMode === 'system') return '◐'
+  return ui.themeMode === 'dark' ? '☾' : '☀'
+})
+
+const themeButtonTitle = computed(() => {
+  const label = { light: '亮色', dark: '暗色', system: '跟随系统' }[ui.themeMode]
+  const next = { light: '暗色', dark: '跟随系统', system: '亮色' }[ui.themeMode]
+  return `当前：${label}（点击切换到${next}）`
+})
+
 // 编辑器页聚焦写作，隐藏右侧信息栏
 const showRail = computed(() => route.name !== 'editor')
 
@@ -46,6 +58,11 @@ function onMenu(key: string): void {
 }
 
 onMounted(async () => {
+  // 跟随系统主题：监听系统亮暗变化
+  const mq = window.matchMedia('(prefers-color-scheme: dark)')
+  ui.updateSystemDark(mq.matches)
+  mq.addEventListener('change', (e) => ui.updateSystemDark(e.matches))
+
   workspace.init()
   const r = await siteStore.init()
   if (r && !r.ok) message.error(`自动打开上次站点失败：${r.error ?? '未知错误'}`)
@@ -80,10 +97,10 @@ onMounted(async () => {
               quaternary
               circle
               :size="ui.navCollapsed ? 'tiny' : 'small'"
-              :title="ui.isDark ? '切换到亮色主题' : '切换到暗色主题'"
-              @click="ui.toggle"
+              :title="themeButtonTitle"
+              @click="ui.cycleTheme"
             >
-              {{ ui.isDark ? '☾' : '☀' }}
+              {{ themeButtonIcon }}
             </n-button>
             <span v-if="!ui.navCollapsed" class="foot-site" :title="siteStore.site?.path">
               {{ siteStore.site?.name ?? '未打开站点' }}
