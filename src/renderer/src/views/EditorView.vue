@@ -112,7 +112,7 @@ async function save(): Promise<void> {
   }
 }
 
-// 自动保存：停止输入 1.5s 后静默保存
+// 自动保存：停止输入后按设置延迟静默保存
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   form,
@@ -121,10 +121,12 @@ watch(
     if (autoSaveTimer) clearTimeout(autoSaveTimer)
     autoSaveTimer = setTimeout(() => {
       if (dirty.value) save()
-    }, 1500)
+    }, ui.autoSaveDelay)
   },
   { deep: true }
 )
+
+const autoSaveSeconds = computed(() => String(Number((ui.autoSaveDelay / 1000).toFixed(1))))
 
 async function publishDraft(): Promise<void> {
   if (!detail.value) return
@@ -239,7 +241,7 @@ onBeforeUnmount(() => {
 
     <div class="status-bar">
       <span>{{ liveWordCount }} 字</span>
-      <span v-if="dirty">· 有未保存修改（1.5s 后自动保存）</span>
+      <span v-if="dirty">· 有未保存修改（{{ autoSaveSeconds }}s 后自动保存）</span>
       <span v-else-if="lastSavedAt">· 已保存于 {{ lastSavedAt }}</span>
       <span v-if="ws.previewUrl" class="hint">· 站内图片已映射到预览服务</span>
     </div>

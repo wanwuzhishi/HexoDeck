@@ -9,6 +9,18 @@ const siteStore = useSiteStore()
 const showCreate = ref(false)
 const creating = ref(false)
 const createForm = ref({ name: '', parentDir: '' })
+const switching = ref('')
+
+async function switchTo(path: string): Promise<void> {
+  switching.value = path
+  try {
+    const r = await siteStore.open(path)
+    if (r.ok) message.success('已切换站点')
+    else message.error(r.error ?? '切换失败')
+  } finally {
+    switching.value = ''
+  }
+}
 
 async function pickParentDir(): Promise<void> {
   const dir = await window.api.pickDirectory()
@@ -67,6 +79,44 @@ async function closeSite(): Promise<void> {
           </n-popconfirm>
         </n-space>
       </section>
+
+      <section class="glass panel" style="margin-top: 12px">
+        <div class="panel-title">站点管理（最近打开）</div>
+        <div v-if="siteStore.recents.length" class="recents">
+          <div v-for="r in siteStore.recents" :key="r.path" class="recent-item">
+            <div class="r-main">
+              <n-space align="center" :size="8">
+                <span class="r-name">{{ r.name }}</span>
+                <n-tag v-if="r.path === siteStore.site.path" size="small" type="success" round :bordered="false">
+                  当前
+                </n-tag>
+              </n-space>
+              <div class="r-path muted small">{{ r.path }}</div>
+            </div>
+            <n-space align="center" :size="6">
+              <n-button
+                v-if="r.path !== siteStore.site.path"
+                size="tiny"
+                secondary
+                :loading="switching === r.path"
+                @click="switchTo(r.path)"
+              >
+                切换
+              </n-button>
+              <n-popconfirm
+                v-if="r.path !== siteStore.site.path"
+                @positive-click="siteStore.removeRecent(r.path)"
+              >
+                <template #trigger>
+                  <n-button size="tiny" quaternary type="error">移除</n-button>
+                </template>
+                从最近列表中移除该站点（不会删除磁盘文件），确定吗？
+              </n-popconfirm>
+            </n-space>
+          </div>
+        </div>
+        <div v-else class="muted small">暂无其他站点记录</div>
+      </section>
     </template>
 
     <template v-else>
@@ -85,14 +135,17 @@ async function closeSite(): Promise<void> {
 
         <div v-if="siteStore.recents.length" class="recents">
           <h3 class="recent-title muted">最近打开</h3>
-          <div
-            v-for="r in siteStore.recents"
-            :key="r.path"
-            class="recent-item"
-            @click="siteStore.open(r.path)"
-          >
-            <span class="r-name">{{ r.name }}</span>
-            <span class="r-path muted small">{{ r.path }}</span>
+          <div v-for="r in siteStore.recents" :key="r.path" class="recent-item">
+            <div class="r-main clickable" @click="siteStore.open(r.path)">
+              <span class="r-name">{{ r.name }}</span>
+              <div class="r-path muted small">{{ r.path }}</div>
+            </div>
+            <n-popconfirm @positive-click="siteStore.removeRecent(r.path)">
+              <template #trigger>
+                <n-button size="tiny" quaternary type="error">移除</n-button>
+              </template>
+              从最近列表中移除该站点（不会删除磁盘文件），确定吗？
+            </n-popconfirm>
           </div>
         </div>
       </section>
@@ -141,13 +194,24 @@ async function closeSite(): Promise<void> {
   gap: 12px;
   padding: 9px 12px;
   border-radius: 10px;
-  cursor: pointer;
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .recent-item:hover {
   background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px var(--glass-border), var(--accent-glow);
+}
+
+.r-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.r-main.clickable {
+  cursor: pointer;
+  flex: 1;
 }
 
 .r-name {

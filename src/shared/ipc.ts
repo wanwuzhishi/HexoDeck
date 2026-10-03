@@ -118,6 +118,18 @@ export interface PluginInfo {
   configKey: string | null
 }
 
+/** 应用级设置（与站点配置无关） */
+export interface AppSettings {
+  /** 关闭窗口时最小化到托盘而非退出 */
+  closeToTray: boolean
+}
+
+export interface AppInfo {
+  version: string
+  logFile: string
+  closeToTray: boolean
+}
+
 /** preload 暴露给渲染进程的 API（window.api） */
 export interface Api {
   openSiteDialog(): Promise<SiteInfo | null>
@@ -126,6 +138,12 @@ export interface Api {
   createSite(name: string, parentDir: string): Promise<Result<SiteInfo>>
   pickDirectory(): Promise<string | null>
   listRecentSites(): Promise<RecentSite[]>
+  removeRecentSite(path: string): Promise<void>
+
+  /** 应用信息与设置 */
+  getAppInfo(): Promise<AppInfo>
+  saveAppSettings(patch: Partial<AppSettings>): Promise<Result<AppSettings>>
+  openLogFolder(): Promise<void>
 
   listPosts(): Promise<PostMeta[]>
   readPost(id: string): Promise<Result<PostDetail>>

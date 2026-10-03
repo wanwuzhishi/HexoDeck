@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Api, BuildCommand, DeployConfig, PostKind, PostPatch, SiteConfigPatch } from '../shared/ipc'
+import type {
+  Api,
+  AppSettings,
+  BuildCommand,
+  DeployConfig,
+  PostKind,
+  PostPatch,
+  SiteConfigPatch
+} from '../shared/ipc'
 
 const api: Api = {
   openSiteDialog: () => ipcRenderer.invoke('site:openDialog'),
@@ -8,6 +16,11 @@ const api: Api = {
   createSite: (name: string, parentDir: string) => ipcRenderer.invoke('site:create', name, parentDir),
   pickDirectory: () => ipcRenderer.invoke('site:pickDirectory'),
   listRecentSites: () => ipcRenderer.invoke('site:recent'),
+  removeRecentSite: (path: string) => ipcRenderer.invoke('site:removeRecent', path),
+
+  getAppInfo: () => ipcRenderer.invoke('app:info'),
+  saveAppSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('app:saveSettings', patch),
+  openLogFolder: () => ipcRenderer.invoke('app:openLogs'),
 
   listPosts: () => ipcRenderer.invoke('post:list'),
   readPost: (id: string) => ipcRenderer.invoke('post:read', id),

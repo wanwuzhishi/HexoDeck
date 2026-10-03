@@ -9,11 +9,23 @@ asar: true
 asarUnpack:
   - resources/embed/**
   - resources/child/**
+  - resources/icon.png
 win:
+  icon: build/icon.png
   target:
     - nsis
+    - portable
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
+  createStartMenuShortcut: true
   shortcutName: HexoDeck
+  artifactName: ${productName}-Setup-${version}.${ext}
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
+# 自动更新预留：发布到 GitHub Releases 时取消注释并配置仓库，再接入 electron-updater
+# publish:
+#   provider: github
+#   owner: your-name
+#   repo: HexoDeck

@@ -50,6 +50,10 @@ export const useSiteStore = defineStore('site', {
     async close(): Promise<void> {
       await window.api.closeSite()
       this.site = null
+    },
+    async removeRecent(path: string): Promise<void> {
+      await window.api.removeRecentSite(path)
+      this.recents = await window.api.listRecentSites()
     }
   }
 })

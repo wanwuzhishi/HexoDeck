@@ -21,7 +21,7 @@ import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
 import CodeEditor from '../components/CodeEditor.vue'
-import type { PluginInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
+import type { AppInfo, PluginInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
 
 const site = useSiteStore()
 const ws = useWorkspaceStore()
@@ -116,6 +116,31 @@ async function installNew(): Promise<void> {
   }
 }
 
+// ---------- 应用设置 ----------
+const appInfo = ref<AppInfo | null>(null)
+const closeToTray = ref(false)
+
+const autoSaveSeconds = computed({
+  get: () => ui.autoSaveDelay / 1000,
+  set: (v: number | null) => ui.setAutoSaveDelay((v ?? 1.5) * 1000)
+})
+
+async function onCloseToTrayChange(v: boolean): Promise<void> {
+  const r = await window.api.saveAppSettings({ closeToTray: v })
+  if (r.ok) {
+    closeToTray.value = r.data?.closeToTray ?? v
+    message.success(v ? '关闭窗口时将最小化到系统托盘' : '关闭窗口时将直接退出应用')
+  } else {
+    closeToTray.value = !v
+    message.error(r.error ?? '保存失败')
+  }
+}
+
+/** 打开日志文件夹 */
+function openLogs(): void {
+  void window.api.openLogFolder()
+}
+
 /** 配置变更后重启预览使新配置生效 */
 async function restartPreviewIfRunning(): Promise<void> {
   if (!ws.previewUrl) return
@@ -128,10 +153,11 @@ async function restartPreviewIfRunning(): Promise<void> {
 async function loadAll(): Promise<void> {
   loading.value = true
   try {
-    const [cfg, th, pl] = await Promise.all([
+    const [cfg, th, pl, info] = await Promise.all([
       window.api.readSiteConfig(),
       window.api.listThemes(),
-      window.api.listPlugins()
+      window.api.listPlugins(),
+      window.api.getAppInfo()
     ])
     if (cfg.ok && cfg.data) {
       Object.assign(base, cfg.data)
@@ -139,6 +165,8 @@ async function loadAll(): Promise<void> {
     }
     if (th.ok && th.data) themes.value = th.data
     if (pl.ok && pl.data) plugins.value = pl.data
+    appInfo.value = info
+    closeToTray.value = info.closeToTray
   } finally {
     loading.value = false
   }
@@ -597,6 +625,57 @@ watch(activeTab, (tab) => {
             <div v-if="!filteredPlugins.length" class="muted small">
               {{ keySearch.trim() ? '没有匹配的插件，换个关键词试试' : '暂无已安装插件' }}
             </div>
+          </div>
+        </section>
+      </n-tab-pane>
+
+      <n-tab-pane name="app" tab="应用">
+        <section class="glass panel">
+          <div class="panel-title">外观与编辑</div>
+          <div class="form-narrow">
+            <n-form label-placement="left" :label-width="110">
+              <n-form-item label="暗色主题">
+                <n-space align="center">
+                  <n-switch :value="ui.isDark" @update:value="ui.setDark" />
+                  <span class="muted small">深空黑 + 霓虹青蓝（也可用左下角 ☾/☀ 按钮切换）</span>
+                </n-space>
+              </n-form-item>
+              <n-form-item label="自动保存延迟">
+                <n-space align="center">
+                  <n-input-number
+                    v-model:value="autoSaveSeconds"
+                    :min="0.5"
+                    :max="10"
+                    :step="0.5"
+                    style="width: 150px"
+                  />
+                  <span class="muted small">编辑器停止输入后多久自动保存（秒）</span>
+                </n-space>
+              </n-form-item>
+            </n-form>
+          </div>
+        </section>
+
+        <section class="glass panel">
+          <div class="panel-title">窗口与日志</div>
+          <div class="form-narrow">
+            <n-form label-placement="left" :label-width="110">
+              <n-form-item label="关闭到托盘">
+                <n-space align="center">
+                  <n-switch :value="closeToTray" @update:value="onCloseToTrayChange" />
+                  <span class="muted small">开启后点关闭按钮最小化到系统托盘，双击托盘图标恢复窗口</span>
+                </n-space>
+              </n-form-item>
+              <n-form-item label="运行日志">
+                <n-space align="center" :size="10">
+                  <n-button size="small" @click="openLogs">打开日志文件夹</n-button>
+                  <span class="muted small path">{{ appInfo?.logFile || '（启动后生成）' }}</span>
+                </n-space>
+              </n-form-item>
+              <n-form-item label="版本">
+                <span class="muted">HexoDeck v{{ appInfo?.version ?? '—' }}</span>
+              </n-form-item>
+            </n-form>
           </div>
         </section>
       </n-tab-pane>

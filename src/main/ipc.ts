@@ -1,8 +1,10 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { appendFile } from 'fs/promises'
 import { join } from 'path'
-import type { BuildCommand, PostKind, PostPatch, Result, SiteInfo } from '@shared/ipc'
+import type { AppSettings, BuildCommand, PostKind, PostPatch, Result, SiteInfo } from '@shared/ipc'
 import type { AppConfig } from './services/config-service'
+import { getLogFile, logLine } from './services/logger'
+import { runtimeFlags } from './services/runtime-flags'
 import {
   createSite,
   openSite as openSiteInfo
@@ -65,7 +67,11 @@ export function registerIpc(ctx: IpcContext): void {
   const broadcast = (channel: string, payload?: unknown): void => {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload)
   }
-  const onLog = (line: string): void => broadcast(EVT_LOG, line)
+  // 运行日志：同步送界面 + 落地到 userData/hexodeck.log
+  const onLog = (line: string): void => {
+    broadcast(EVT_LOG, line)
+    void logLine(line)
+  }
   const okResult = <T>(data?: T): Result<T> => ({ ok: true, data })
 
   const stopPreview = async (): Promise<void> => {
@@ -83,6 +89,7 @@ export function registerIpc(ctx: IpcContext): void {
     watcher = watchSource(dir, () => broadcast(EVT_FS))
     currentSite = dir
     await ctx.config.addRecentSite(dir, name)
+    void logLine(`打开站点: ${dir}`)
     return openSiteInfo(dir)
   }
 
@@ -139,6 +146,35 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   ipcMain.handle('site:recent', async () => (await ctx.config.read()).recentSites)
+
+  ipcMain.handle('site:removeRecent', async (_e, path: string) => {
+    await ctx.config.removeRecentSite(path)
+  })
+
+  // ============ 应用信息与设置（M4） ============
+
+  ipcMain.handle('app:info', async () => ({
+    version: app.getVersion(),
+    logFile: getLogFile(),
+    closeToTray: (await ctx.config.getSettings()).closeToTray
+  }))
+
+  ipcMain.handle('app:saveSettings', async (_e, patch: Partial<AppSettings>) => {
+    try {
+      const settings = await ctx.config.patchSettings(patch)
+      runtimeFlags.closeToTray = settings.closeToTray
+      void logLine(`应用设置已更新: ${JSON.stringify(settings)}`)
+      return { ok: true, data: settings }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('app:openLogs', async () => {
+    const file = getLogFile()
+    if (file) shell.showItemInFolder(file)
+    else await shell.openPath(app.getPath('userData'))
+  })
 
   const requireSite = (): string => {
     if (!currentSite) throw new Error('尚未打开站点')
@@ -208,7 +244,9 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('build:run', async (_e, command: BuildCommand) => {
     try {
-      return await runHexoBuild(ctx.childBase, requireSite(), command, onLog)
+      const result = await runHexoBuild(ctx.childBase, requireSite(), command, onLog)
+      void logLine(`构建 ${command}: ${result.ok ? '成功' : '失败'}（${result.durationMs}ms）`)
+      return result
     } catch (e) {
       onLog(`✗ ${(e as Error).message}`)
       return { ok: false, command, durationMs: 0, error: (e as Error).message }

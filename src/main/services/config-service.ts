@@ -1,12 +1,15 @@
 import { promises as fs } from 'fs'
 import { join } from 'path'
-import type { RecentSite } from '@shared/ipc'
+import type { AppSettings, RecentSite } from '@shared/ipc'
 
 export interface AppConfigState {
   recentSites: RecentSite[]
+  settings: AppSettings
 }
 
-const DEFAULTS: AppConfigState = { recentSites: [] }
+export const DEFAULT_SETTINGS: AppSettings = {
+  closeToTray: false
+}
 
 /** 应用配置持久化（userData/hexodeck.json） */
 export class AppConfig {
@@ -18,9 +21,12 @@ export class AppConfig {
     if (this.cache) return this.cache
     try {
       const parsed = JSON.parse(await fs.readFile(this.file, 'utf8')) as Partial<AppConfigState>
-      this.cache = { ...DEFAULTS, ...parsed, recentSites: parsed.recentSites ?? [] }
+      this.cache = {
+        recentSites: parsed.recentSites ?? [],
+        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) }
+      }
     } catch {
-      this.cache = { ...DEFAULTS }
+      this.cache = { recentSites: [], settings: { ...DEFAULT_SETTINGS } }
     }
     return this.cache
   }
@@ -32,6 +38,23 @@ export class AppConfig {
       ...state.recentSites.filter((s) => s.path !== path)
     ].slice(0, 10)
     await this.write(state)
+  }
+
+  async removeRecentSite(path: string): Promise<void> {
+    const state = await this.read()
+    state.recentSites = state.recentSites.filter((s) => s.path !== path)
+    await this.write(state)
+  }
+
+  async getSettings(): Promise<AppSettings> {
+    return (await this.read()).settings
+  }
+
+  async patchSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+    const state = await this.read()
+    state.settings = { ...state.settings, ...patch }
+    await this.write(state)
+    return state.settings
   }
 
   async write(state: AppConfigState): Promise<void> {
