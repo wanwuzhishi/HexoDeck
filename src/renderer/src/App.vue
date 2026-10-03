@@ -188,13 +188,31 @@ onMounted(async () => {
   border-radius: 12px !important;
 }
 
-/* 走内边距而非伪元素偏移来保证图标与文字位置舒适 */
-.sider :deep(.n-menu-item-content-header) {
+/* 展开态：图标留出左侧内边距，文字紧随其后 */
+.sider:not(.collapsed) :deep(.n-menu-item-content .n-menu-item-content__icon) {
+  margin-left: 10px;
+}
+
+.sider:not(.collapsed) :deep(.n-menu-item-content-header) {
   padding-left: 4px;
 }
 
-.sider :deep(.n-menu-item-content .n-menu-item-content__icon) {
-  margin-left: 10px;
+/* 折叠态：naive-ui 仅把文字头设为 opacity:0，它仍占据布局宽度导致图标偏左。
+   将其宽度归零后，flex 居中只作用于图标本身 */
+.sider.collapsed :deep(.n-menu-item-content) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sider.collapsed :deep(.n-menu-item-content-header) {
+  display: none !important;
+}
+
+.sider.collapsed :deep(.n-menu-item-content .n-menu-item-content__icon) {
+  margin: 0 !important;
+  position: static !important;
+  transform: none !important;
 }
 
 .sider :deep(.n-menu-item-content--selected) {

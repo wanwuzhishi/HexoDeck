@@ -5,7 +5,6 @@
 import { promises as fs } from 'fs'
 import { join, resolve } from 'path'
 import * as tar from 'tar'
-import extractZip from 'extract-zip'
 import { createSite } from '../src/main/services/site-service'
 import { installThemeFromArchive, isArchive } from '../src/main/services/theme-archive-service'
 
