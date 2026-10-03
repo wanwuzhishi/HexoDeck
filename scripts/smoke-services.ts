@@ -1,6 +1,6 @@
 /**
  * M1 服务层验收脚本（不启动 Electron 界面，直接调用主进程服务）
- * 对真实站点 F:\hexo 执行：读取 → 建草稿 → 保存 → 校验 → 删除 → 生成 → 预览 → 停止
+ * 对指定 Hexo 站点执行：读取 → 建草稿 → 保存 → 校验 → 删除 → 生成 → 预览 → 停止
  * 用法: npx tsx scripts/smoke-services.ts <siteDir>
  */
 import { promises as fs } from 'fs'
@@ -32,7 +32,11 @@ import {
   type ChildBase
 } from '../src/main/services/hexo-process-service'
 
-const siteDir = process.argv[2] ?? 'F:\\hexo'
+const siteDir = process.argv[2]
+if (!siteDir) {
+  console.error('用法: npx tsx scripts/smoke-services.ts <Hexo 站点目录>')
+  process.exit(1)
+}
 const childBase: ChildBase = { childScript: resolve('resources/child/hexo-child.js') }
 
 let failed = 0
