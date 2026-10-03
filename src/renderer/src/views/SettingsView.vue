@@ -25,6 +25,7 @@ import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
 import CodeEditor from '../components/CodeEditor.vue'
+import appIcon from '../assets/app-icon.png'
 import type { AppInfo, PluginInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
 
 const site = useSiteStore()
@@ -204,6 +205,19 @@ const updateStateText = computed(() => {
 const updateStateOk = computed(
   () => ws.updateStatus.state === 'not-available' || ws.updateStatus.state === 'downloaded'
 )
+
+/** 打开项目相关网页 */
+function openExternal(url: string): void {
+  window.open(url)
+}
+
+function openRepo(): void {
+  openExternal('https://github.com/wanwuzhishi/HexoDeck')
+}
+
+function openIssues(): void {
+  openExternal('https://github.com/wanwuzhishi/HexoDeck/issues')
+}
 
 /** 打开日志文件夹 */
 function openLogs(): void {
@@ -860,6 +874,31 @@ watch(activeTab, (tab) => {
         </section>
 
         <section class="glass panel">
+          <div class="panel-title">关于</div>
+          <div class="about-grid">
+            <div class="about-main">
+              <img class="about-logo" :src="appIcon" alt="HexoDeck" />
+              <div class="about-text">
+                <div class="about-name">
+                  HexoDeck
+                  <n-tag size="small" round :bordered="false">v{{ appInfo?.version ?? '—' }}</n-tag>
+                </div>
+                <div class="muted small">
+                  Hexo 博客图形化管理工具 —— 写作、预览、发布、配置全流程
+                </div>
+              </div>
+            </div>
+            <n-space align="center" :size="8">
+              <n-button size="small" secondary @click="openRepo">GitHub 仓库</n-button>
+              <n-button size="small" secondary @click="openIssues">问题反馈</n-button>
+            </n-space>
+          </div>
+          <div class="about-foot muted small">
+            基于 Electron + Vue 3 · 内嵌 Hexo 引擎 · 采用 MIT 许可证开源
+          </div>
+        </section>
+
+        <section class="glass panel">
           <div class="panel-title">窗口与日志</div>
           <div class="form-narrow">
             <n-form label-placement="left" :label-width="110">
@@ -921,6 +960,46 @@ watch(activeTab, (tab) => {
 
 .update-state.err {
   color: var(--danger);
+}
+
+/* 关于卡片 */
+.about-grid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.about-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.about-logo {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 12px;
+  object-fit: contain;
+  box-shadow: var(--accent-glow);
+}
+
+.about-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.about-foot {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border);
 }
 
 .panel-head-row {
