@@ -39,8 +39,10 @@ Electron + Vue 3 + Naive UI · 双主题（深空霓虹 / 冰白清新）· 内�
 
 ### 使用打包版（推荐）
 
-- **安装版**：运行 `HexoDeck-Setup-x.y.z.exe`，按向导安装（可选安装目录）
-- **便携版**：直接运行 `HexoDeck-Portable-x.y.z.exe`，零安装即可使用
+- **安装版**：运行 `HexoDeck-Setup-x.y.z.exe`，按向导安装（可选安装目录），日常使用首选
+- **绿色包**：解压 `HexoDeck-x.y.z-win.zip` 到任意目录（U 盘亦可），运行其中的 `HexoDeck.exe` 即可，零安装、秒启动
+
+> 提示：绿色包请先解压再使用（不要在压缩包里直接双击运行）。解压后启动仅需不到 1 秒；每次启动都重新解压的「单文件便携版」体验很差，已不再提供。
 
 首次启动后点击「打开站点目录」选择你的 Hexo 博客根目录（包含 `_config.yml` 的目录）即可。
 
@@ -58,7 +60,7 @@ npm run dev
 
 ```bash
 npm run build:unpack  # 生成 dist/win-unpacked 目录（快速验证）
-npm run build:win     # 生成 NSIS 安装包 + 便携版
+npm run build:win     # 生成 NSIS 安装包 + 绿色包 zip
 ```
 
 ## 目录结构

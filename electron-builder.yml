@@ -14,7 +14,7 @@ win:
   icon: build/icon.png
   target:
     - nsis
-    - portable
+    - zip
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
@@ -22,8 +22,6 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: HexoDeck
   artifactName: ${productName}-Setup-${version}.${ext}
-portable:
-  artifactName: ${productName}-Portable-${version}.${ext}
 # 自动更新预留：发布到 GitHub Releases 时取消注释并配置仓库，再接入 electron-updater
 # publish:
 #   provider: github

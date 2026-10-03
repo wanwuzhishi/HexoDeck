@@ -10,3 +10,4 @@ resources/embed/node_modules/
 .vscode/
 fix-*.log
 *.dmp
+dist/HexoDeck-Portable/
