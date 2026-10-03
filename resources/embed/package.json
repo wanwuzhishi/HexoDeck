@@ -1,0 +1,13 @@
+{
+  "name": "hexodeck-embed",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HexoDeck 内嵌 Hexo 引擎，打包时整体解压出 asar，供子进程加载",
+  "dependencies": {
+    "hexo": "^8.1.2"
+  },
+  "allowScripts": {
+    "hexo-util@3.3.0": true,
+    "hexo-util@4.0.0": true
+  }
+}

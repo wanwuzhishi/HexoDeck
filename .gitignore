@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+resources/embed/node_modules/
+*.log
+*.local
+.DS_Store
+.idea/
+.vscode/

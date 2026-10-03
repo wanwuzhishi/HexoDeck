@@ -1,0 +1,19 @@
+appId: com.hexodeck.app
+productName: HexoDeck
+directories:
+  buildResources: build
+files:
+  - out/**
+  - resources/**
+asar: true
+asarUnpack:
+  - resources/embed/**
+  - resources/child/**
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: HexoDeck
