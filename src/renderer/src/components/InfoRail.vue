@@ -31,6 +31,11 @@ function openEditor(id: string): void {
   router.push({ path: '/editor', query: { id } })
 }
 
+/** 点击统计卡片直达统计页 */
+function openStats(): void {
+  router.push('/stats')
+}
+
 onMounted(() => {
   if (!posts.loaded) posts.load()
 })
@@ -56,8 +61,11 @@ watch(
       </div>
     </section>
 
-    <section class="glass panel">
-      <div class="panel-title">统计</div>
+    <section class="glass panel clickable-panel" title="查看完整统计" @click="openStats">
+      <div class="panel-head-row">
+        <div class="panel-title">统计</div>
+        <span class="go-hint muted small">查看详情 ›</span>
+      </div>
       <div class="stat-grid">
         <div class="stat">
           <div class="num">{{ postCount }}</div>
@@ -112,6 +120,35 @@ watch(
 
 .panel {
   padding: 14px 16px;
+}
+
+/* 可点击卡片：悬停时描边点亮并轻微上浮，提示可交互 */
+.clickable-panel {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.clickable-panel:hover {
+  border-color: var(--accent);
+  box-shadow: var(--glass-glow), var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.clickable-panel .go-hint {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.clickable-panel:hover .go-hint {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.panel-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .site-name {
