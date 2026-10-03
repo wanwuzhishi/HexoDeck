@@ -192,6 +192,12 @@ export interface Api {
   saveRawConfig(content: string): Promise<Result>
   listThemes(): Promise<Result<ThemeInfo[]>>
   switchTheme(name: string): Promise<Result>
+  /** 打开文件对话框选择主题压缩包并安装 */
+  installThemeFromDialog(): Promise<Result<{ name: string }>>
+  /** 从压缩包路径安装主题（拖拽安装用） */
+  installThemeFromArchive(archivePath: string): Promise<Result<{ name: string }>>
+  /** 从拖拽的文件对象中提取磁盘路径（Electron 提供 webUtils.getPathForFile） */
+  pathForFile(file: File): string
   readThemeConfig(): Promise<Result<ThemeConfigFile>>
   saveThemeConfig(content: string): Promise<Result>
   listPlugins(): Promise<Result<PluginInfo[]>>

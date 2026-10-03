@@ -135,6 +135,27 @@ async function main(): Promise<void> {
 
   const th = await listThemes(tmpSite)
   check('主题检测（npm 来源）', th.some((t) => t.name === 'landscape' && t.source === 'npm'))
+
+  // CRLF 回归测试：Windows 上 _config.yml 多为 CRLF，若读取时未剥离 \r，
+  // 已有键会被误判为不存在而追加重复键（真实事故：YAML duplicated mapping key）
+  const crlfPath = join(tmpSite, '_config.yml')
+  const crlfText = (await fs.readFile(crlfPath, 'utf8')).replace(/\r?\n/g, '\r\n')
+  await fs.writeFile(crlfPath, crlfText, 'utf8')
+  await switchTheme(tmpSite, 'crlf-test-theme')
+  const crlfAfter = await fs.readFile(crlfPath, 'utf8')
+  const themeKeyCount = (crlfAfter.match(/^theme:/gm) ?? []).length
+  check('CRLF 文件不产生重复键', themeKeyCount === 1, `theme 键出现 ${themeKeyCount} 次`)
+  check('CRLF 文件主题正确写入', (await readSiteConfig(tmpSite)).theme === 'crlf-test-theme')
+  check('CRLF 行尾风格保留', crlfAfter.includes('\r\n'))
+
+  // 历史坏文件自愈：手工注入重复键后保存应被清理
+  const dupText = crlfAfter.replace(/\r\n/g, '\r\n') + 'theme: stray-duplicate\r\n'
+  await fs.writeFile(crlfPath, dupText, 'utf8')
+  await saveBaseConfig(tmpSite, { subtitle: '去重复键测试' })
+  const healed = await fs.readFile(crlfPath, 'utf8')
+  check('已有重复键被自动清理', (healed.match(/^theme:/gm) ?? []).length === 1)
+  check('清理后 YAML 可正常解析', await readSiteConfig(tmpSite).then(() => true).catch(() => false))
+
   await switchTheme(tmpSite, 'butterfly')
   const cfg5 = await readSiteConfig(tmpSite)
   check('主题切换写入', cfg5.theme === 'butterfly')

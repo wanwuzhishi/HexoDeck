@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   Api,
   AppSettings,
@@ -45,6 +45,17 @@ const api: Api = {
   saveRawConfig: (content: string) => ipcRenderer.invoke('config:saveRaw', content),
   listThemes: () => ipcRenderer.invoke('theme:list'),
   switchTheme: (name: string) => ipcRenderer.invoke('theme:switch', name),
+  installThemeFromDialog: () => ipcRenderer.invoke('theme:installDialog'),
+  installThemeFromArchive: (archivePath: string) =>
+    ipcRenderer.invoke('theme:installArchive', archivePath),
+  // 拖拽的 File 对象在渲染进程拿不到磁盘路径，需经 webUtils 转换（Electron 32+）
+  pathForFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file)
+    } catch {
+      return ''
+    }
+  },
   readThemeConfig: () => ipcRenderer.invoke('theme:readConfig'),
   saveThemeConfig: (content: string) => ipcRenderer.invoke('theme:saveConfig', content),
   listPlugins: () => ipcRenderer.invoke('plugin:list'),

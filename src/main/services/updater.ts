@@ -1,4 +1,6 @@
 import { app } from 'electron'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 import type { ProgressInfo, UpdateInfo } from 'electron-updater'
 import type { UpdateStatus } from '@shared/ipc'
@@ -8,6 +10,24 @@ let emit: (s: UpdateStatus) => void = () => undefined
 let autoCheck = true
 let wired = false
 let lastProgressLogged = -1
+
+/**
+ * 自动更新可用性：需要打包版本且存在更新配置（app-update.yml）。
+ * `electron-builder --dir` 产物 isPackaged 为 true 但没有该文件，
+ * 直接初始化会抛 ENOENT，这里统一判定并给出可读提示。
+ */
+function updateConfigPath(): string {
+  return join(process.resourcesPath ?? '', 'app-update.yml')
+}
+
+function isUpdateSupported(): boolean {
+  return app.isPackaged && existsSync(updateConfigPath())
+}
+
+function unsupportedReason(): string {
+  if (!app.isPackaged) return '开发模式不支持自动更新（打包版本可用）'
+  return '当前为免安装构建（缺少 app-update.yml），请使用安装版以获得自动更新'
+}
 
 function status(s: UpdateStatus, log = true): void {
   emit(s)
@@ -27,12 +47,12 @@ export function setUpdateEmitter(fn: (s: UpdateStatus) => void): void {
   emit = fn
 }
 
-/** 初始化自动更新（仅打包版本；开发模式直接上报 unsupported） */
+/** 初始化自动更新（仅安装版；免安装构建与开发模式上报 unsupported） */
 export function initUpdater(): void {
   if (wired) return
   wired = true
-  if (!app.isPackaged) {
-    status({ state: 'unsupported', message: '开发模式不支持自动更新（打包版本可用）' })
+  if (!isUpdateSupported()) {
+    status({ state: 'unsupported', message: unsupportedReason() })
     return
   }
 
@@ -77,8 +97,8 @@ export function setAutoCheck(v: boolean): void {
 
 /** 手动/自动检查更新 */
 export async function checkForUpdates(): Promise<void> {
-  if (!app.isPackaged) {
-    status({ state: 'unsupported', message: '开发模式不支持自动更新（打包版本可用）' })
+  if (!isUpdateSupported()) {
+    status({ state: 'unsupported', message: unsupportedReason() })
     return
   }
   try {
@@ -90,13 +110,13 @@ export async function checkForUpdates(): Promise<void> {
 
 /** 退出并安装已下载的更新 */
 export function quitAndInstall(): void {
-  if (!app.isPackaged) return
+  if (!isUpdateSupported()) return
   autoUpdater.quitAndInstall()
 }
 
 /** 启动后延时检查一次 + 每 6 小时轮询（尊重自动检查开关） */
 export function scheduleUpdateChecks(): void {
-  if (!app.isPackaged) return
+  if (!isUpdateSupported()) return
   setTimeout(() => {
     if (autoCheck) void checkForUpdates()
   }, 8_000)

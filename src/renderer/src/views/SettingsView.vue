@@ -290,6 +290,61 @@ async function switchTheme(name: string): Promise<void> {
   }
 }
 
+// ---------- 从压缩包安装主题 ----------
+const dragActive = ref(false)
+const installingArchive = ref(false)
+
+/** 拖拽离开时只有真正离开容器才取消高亮（子元素会反复触发 dragleave） */
+function onDragLeave(e: DragEvent): void {
+  const zone = e.currentTarget as HTMLElement
+  if (!zone.contains(e.relatedTarget as Node)) dragActive.value = false
+}
+
+async function installFromArchive(archivePath: string): Promise<void> {
+  installingArchive.value = true
+  try {
+    const r = await window.api.installThemeFromArchive(archivePath)
+    if (r.ok) {
+      message.success(`主题 ${r.data?.name} 安装成功，可在下方列表中切换使用`)
+      await loadAll()
+    } else {
+      message.error(r.error ?? '安装失败')
+    }
+  } finally {
+    installingArchive.value = false
+  }
+}
+
+async function onDropTheme(e: DragEvent): Promise<void> {
+  dragActive.value = false
+  const files = Array.from(e.dataTransfer?.files ?? [])
+  if (!files.length) return
+  if (files.length > 1) {
+    message.warning('一次只能安装一个主题压缩包，已使用第一个文件')
+  }
+  const file = files[0]
+  const path = window.api.pathForFile(file)
+  if (!path) {
+    message.error('无法获取文件路径，请改用「浏览文件」按钮选择')
+    return
+  }
+  if (!/\.(zip|tar|tar\.gz|tgz)$/i.test(path)) {
+    message.error('仅支持 .zip / .tar / .tar.gz / .tgz 格式的主题压缩包')
+    return
+  }
+  await installFromArchive(path)
+}
+
+async function pickThemeArchive(): Promise<void> {
+  const r = await window.api.installThemeFromDialog()
+  if (r.ok) {
+    message.success(`主题 ${r.data?.name} 安装成功，可在下方列表中切换使用`)
+    await loadAll()
+  } else if (r.error && r.error !== 'canceled') {
+    message.error(r.error)
+  }
+}
+
 async function loadThemeConfig(): Promise<void> {
   const r = await window.api.readThemeConfig()
   if (r.ok && r.data) {
@@ -520,6 +575,33 @@ watch(activeTab, (tab) => {
       </n-tab-pane>
 
       <n-tab-pane name="theme" tab="主题">
+        <section class="glass panel">
+          <div class="panel-title">从压缩包安装主题</div>
+          <div
+            class="drop-zone"
+            :class="{ dragging: dragActive, busy: installingArchive }"
+            @dragenter.prevent="dragActive = true"
+            @dragover.prevent="dragActive = true"
+            @dragleave.prevent="onDragLeave"
+            @drop.prevent="onDropTheme"
+          >
+            <div class="drop-icon">📦</div>
+            <div class="drop-text">
+              <template v-if="installingArchive">正在解压安装，请稍候…</template>
+              <template v-else-if="dragActive">松开鼠标即可安装主题</template>
+              <template v-else>
+                把主题压缩包拖到这里，或
+                <n-button size="tiny" type="primary" :disabled="installingArchive" @click="pickThemeArchive">
+                  浏览文件
+                </n-button>
+              </template>
+            </div>
+            <div class="muted small">
+              支持 .zip / .tar / .tar.gz / .tgz；解压后自动识别主题目录并放入站点的 themes/ 目录
+            </div>
+          </div>
+        </section>
+
         <section class="glass panel">
           <div class="panel-title">已安装主题</div>
           <div class="theme-grid">
@@ -826,6 +908,45 @@ watch(activeTab, (tab) => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 10px;
+}
+
+/* 主题压缩包拖拽安装区 */
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 26px 16px;
+  text-align: center;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.drop-zone.dragging {
+  border-color: var(--accent);
+  border-style: solid;
+  box-shadow: var(--accent-glow);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.drop-zone.busy {
+  opacity: 0.75;
+}
+
+.drop-icon {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.drop-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
 .theme-card,

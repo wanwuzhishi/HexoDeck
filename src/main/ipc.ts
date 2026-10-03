@@ -26,6 +26,7 @@ import {
   searchPosts
 } from './services/post-service'
 import { saveImage } from './services/asset-service'
+import { installThemeFromArchive, isArchive } from './services/theme-archive-service'
 import {
   listPlugins,
   listThemes,
@@ -371,6 +372,36 @@ export function registerIpc(ctx: IpcContext): void {
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }
+  })
+
+  // 从压缩包安装主题（对话框选择 / 拖拽）
+  const installThemeArchive = async (archivePath: string) => {
+    try {
+      const result = await installThemeFromArchive(requireSite(), archivePath, onLog)
+      void logLine(`主题安装完成: ${result.name}`)
+      return okResult({ name: result.name })
+    } catch (e) {
+      const msg = (e as Error).message
+      onLog(`✗ 主题安装失败：${msg}`)
+      return { ok: false, error: msg }
+    }
+  }
+
+  ipcMain.handle('theme:installDialog', async () => {
+    const picked = await dialog.showOpenDialog({
+      title: '选择主题压缩包',
+      filters: [{ name: '主题压缩包', extensions: ['zip', 'tar', 'gz', 'tgz'] }],
+      properties: ['openFile']
+    })
+    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, error: 'canceled' }
+    return installThemeArchive(picked.filePaths[0])
+  })
+
+  ipcMain.handle('theme:installArchive', async (_e, archivePath: string) => {
+    if (!isArchive(archivePath)) {
+      return { ok: false, error: '仅支持 .zip / .tar / .tar.gz / .tgz 格式的主题压缩包' }
+    }
+    return installThemeArchive(archivePath)
   })
 
   ipcMain.handle('theme:readConfig', async () => {

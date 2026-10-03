@@ -15,6 +15,47 @@ async function readText(siteDir: string): Promise<string> {
   return fs.readFile(configPath(siteDir), 'utf8')
 }
 
+/**
+ * 读取并按行拆分配置，同时记录原始行尾风格。
+ * 必须剥离行尾 \r：Windows 上的 _config.yml 多为 CRLF，
+ * 若不剥离，`^key:` 这类以 $ 结尾的正则会因残留 \r 匹配失败，
+ * 导致已有键被误判为不存在而追加重复键（YAML duplicated mapping key）。
+ */
+async function readLines(siteDir: string): Promise<{ lines: string[]; eol: string }> {
+  const text = await readText(siteDir)
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  const lines = text.split(/\r?\n/)
+  dedupeTopLevelKeys(lines)
+  return { lines, eol }
+}
+
+/** 按原行尾风格写回 */
+async function writeLines(siteDir: string, lines: string[], eol: string): Promise<void> {
+  await fs.writeFile(configPath(siteDir), lines.join(eol), 'utf8')
+}
+
+/**
+ * 保存前修复顶层重复键：保留每个键的首次出现，删除后续重复项及其紧邻的
+ * 「# added by HexoDeck」标记（历史版本曾因 CRLF 未剥离而误追加重复键）。
+ * 只处理列 0 的键，不影响嵌套结构。
+ */
+function dedupeTopLevelKeys(lines: string[]): void {
+  const seen = new Set<string>()
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([A-Za-z_][\w-]*):/.exec(lines[i])
+    if (!m) continue
+    const key = m[1]
+    if (!seen.has(key)) {
+      seen.add(key)
+      continue
+    }
+    // 删除该重复行；若上一行是 HexoDeck 追加标记则一并删除
+    lines.splice(i, 1)
+    if (lines[i - 1] === '# added by HexoDeck') lines.splice(i - 1, 1)
+    i--
+  }
+}
+
 /** 首次修改前备份原始 _config.yml（仅备份一次，保留用户可手动回退的副本） */
 async function backupOnce(siteDir: string): Promise<void> {
   const bak = configPath(siteDir) + BACKUP_SUFFIX
@@ -34,10 +75,14 @@ function scalar(v: string | number | boolean): string {
 /** 行级替换顶层标量键（只匹配列 0 的键，不碰嵌套缩进行，注释与顺序全保留）；键不存在时追加到文件尾 */
 function setScalarLine(lines: string[], key: string, value: string): void {
   const re = new RegExp(`^(${key}:)(\\s+.*)?$`)
-  const idx = lines.findIndex((l) => re.test(l))
   const entry = `${key}: ${value}`
+  const idx = lines.findIndex((l) => re.test(l))
   if (idx >= 0) {
     lines[idx] = entry
+    // 清理历史遗留的重复键（曾因 CRLF 未剥离而被误追加，会导致 YAML duplicated mapping key）
+    for (let i = lines.length - 1; i > idx; i--) {
+      if (re.test(lines[i])) lines.splice(i, 1)
+    }
   } else {
     // 去掉文件尾空行后追加，避免连续空行
     while (lines.length && lines[lines.length - 1].trim() === '') lines.pop()
@@ -139,8 +184,7 @@ export interface BasePatch {
 
 export async function saveBaseConfig(siteDir: string, patch: BasePatch): Promise<void> {
   await backupOnce(siteDir)
-  const text = await readText(siteDir)
-  const lines = text.split('\n')
+  const { lines, eol } = await readLines(siteDir)
   const strKeys = ['title', 'subtitle', 'description', 'author', 'language', 'timezone', 'url', 'root', 'permalink'] as const
   for (const k of strKeys) {
     const v = patch[k]
@@ -153,23 +197,21 @@ export async function saveBaseConfig(siteDir: string, patch: BasePatch): Promise
   if (patch.postAssetFolder !== undefined) {
     setScalarLine(lines, 'post_asset_folder', String(patch.postAssetFolder))
   }
-  await fs.writeFile(configPath(siteDir), lines.join('\n'), 'utf8')
+  await writeLines(siteDir, lines, eol)
 }
 
 export async function saveDeployConfig(siteDir: string, deploy: DeployConfig): Promise<void> {
   await backupOnce(siteDir)
-  const text = await readText(siteDir)
-  const lines = text.split('\n')
+  const { lines, eol } = await readLines(siteDir)
   setDeployBlock(lines, deploy)
-  await fs.writeFile(configPath(siteDir), lines.join('\n'), 'utf8')
+  await writeLines(siteDir, lines, eol)
 }
 
 export async function switchTheme(siteDir: string, name: string): Promise<void> {
   await backupOnce(siteDir)
-  const text = await readText(siteDir)
-  const lines = text.split('\n')
+  const { lines, eol } = await readLines(siteDir)
   setScalarLine(lines, 'theme', scalar(name))
-  await fs.writeFile(configPath(siteDir), lines.join('\n'), 'utf8')
+  await writeLines(siteDir, lines, eol)
 }
 
 /** 已安装主题：themes/ 目录 + node_modules 中的 hexo-theme-* */
