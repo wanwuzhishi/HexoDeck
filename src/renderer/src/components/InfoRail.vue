@@ -52,7 +52,10 @@ watch(
 <template>
   <aside class="rail-inner">
     <section class="glass panel">
-      <div class="panel-title">站点</div>
+      <div class="panel-head-row">
+        <div class="panel-title">站点</div>
+        <n-button size="tiny" secondary @click="site.openViaDialog()">切换站点</n-button>
+      </div>
       <div class="site-name">{{ site.site?.name ?? '未打开站点' }}</div>
       <div class="muted small path">{{ site.site?.path ?? '打开一个 Hexo 站点后显示详情' }}</div>
       <div v-if="ws.previewUrl" class="preview-chip">
