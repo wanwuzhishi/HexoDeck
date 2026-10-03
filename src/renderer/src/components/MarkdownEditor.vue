@@ -6,6 +6,7 @@ import { basicSetup } from 'codemirror'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { oneDark } from '@codemirror/theme-one-dark'
+import { redo, undo } from '@codemirror/commands'
 import { NButton } from 'naive-ui'
 import { message } from '../composables/message'
 
@@ -152,17 +153,57 @@ function prefixLines(prefix: string): void {
   cm.focus()
 }
 
-const tools: Array<{ label: string; title: string; action: () => void }> = [
+/** 去除选区中的行内格式标记（粗体/斜体/行内代码/删除线） */
+function clearFormat(): void {
+  const cm = view.value
+  if (!cm) return
+  const { from, to } = cm.state.selection.main
+  if (from === to) {
+    message.info('请先选中要清除格式的文字')
+    return
+  }
+  const selected = cm.state.sliceDoc(from, to)
+  cm.dispatch({
+    changes: { from, to, insert: selected.replace(/(\*\*|__|\*|_|~~|`)/g, '') }
+  })
+  cm.focus()
+}
+
+function run(cmd: (v: EditorView) => boolean): void {
+  const cm = view.value
+  if (!cm) return
+  cmd(cm)
+  cm.focus()
+}
+
+interface Tool {
+  label: string
+  title: string
+  action: () => void
+}
+
+/** 第一行：标题与行内格式 */
+const toolsLine1: Array<Tool | 'sep'> = [
+  { label: 'H1', title: '一级标题', action: () => prefixLines('# ') },
   { label: 'H2', title: '二级标题', action: () => prefixLines('## ') },
   { label: 'H3', title: '三级标题', action: () => prefixLines('### ') },
+  { label: 'H4', title: '四级标题', action: () => prefixLines('#### ') },
+  'sep',
   { label: 'B', title: '粗体', action: () => wrapSelection('**') },
   { label: 'I', title: '斜体', action: () => wrapSelection('*') },
   { label: 'S', title: '删除线', action: () => wrapSelection('~~') },
-  { label: '``', title: '行内代码', action: () => wrapSelection('`') },
+  { label: '`', title: '行内代码', action: () => wrapSelection('`') },
+  'sep',
   { label: '代码块', title: '代码块', action: () => wrapSelection('\n```\n', '\n```\n') },
   { label: '引用', title: '引用', action: () => prefixLines('> ') },
+  'sep',
   { label: '• 列表', title: '无序列表', action: () => prefixLines('- ') },
   { label: '1. 列表', title: '有序列表', action: () => prefixLines('1. ') },
+  { label: '☑ 任务', title: '任务列表', action: () => prefixLines('- [ ] ') }
+]
+
+/** 第二行：插入与编辑操作 */
+const toolsLine2: Array<Tool | 'sep'> = [
   { label: '链接', title: '插入链接', action: () => wrapSelection('[', '](https://)') },
   { label: '图片', title: '插入图片（也可直接粘贴/拖拽）', action: pickImage },
   {
@@ -171,16 +212,34 @@ const tools: Array<{ label: string; title: string; action: () => void }> = [
     action: () =>
       insertAtCursor('\n| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |\n')
   },
-  { label: '分割线', title: '分割线', action: () => insertAtCursor('\n---\n') }
+  { label: '分割线', title: '分割线', action: () => insertAtCursor('\n---\n') },
+  'sep',
+  { label: '清除格式', title: '去除选区的粗体/斜体/代码/删除线标记', action: clearFormat },
+  'sep',
+  { label: '撤销', title: '撤销 (Ctrl+Z)', action: () => run(undo) },
+  { label: '重做', title: '重做 (Ctrl+Y)', action: () => run(redo) }
 ]
 </script>
 
 <template>
   <div class="md-editor">
     <div class="toolbar">
-      <n-button v-for="t in tools" :key="t.label" size="tiny" quaternary :title="t.title" @click="t.action">
-        {{ t.label }}
-      </n-button>
+      <div class="toolbar-row">
+        <template v-for="(t, i) in toolsLine1" :key="`l1-${i}`">
+          <span v-if="t === 'sep'" class="sep" />
+          <n-button v-else size="tiny" quaternary :title="t.title" @click="t.action">
+            {{ t.label }}
+          </n-button>
+        </template>
+      </div>
+      <div class="toolbar-row">
+        <template v-for="(t, i) in toolsLine2" :key="`l2-${i}`">
+          <span v-if="t === 'sep'" class="sep" />
+          <n-button v-else size="tiny" quaternary :title="t.title" @click="t.action">
+            {{ t.label }}
+          </n-button>
+        </template>
+      </div>
       <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="onPicked" />
     </div>
     <div ref="container" class="cm-container"></div>
@@ -198,12 +257,24 @@ const tools: Array<{ label: string; title: string; action: () => void }> = [
   overflow: hidden;
 }
 .toolbar {
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  background: rgba(128, 128, 128, 0.06);
+  padding: 3px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.toolbar-row {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
-  padding: 4px 6px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-  background: rgba(128, 128, 128, 0.06);
+  align-items: center;
+}
+.sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  background: rgba(128, 128, 128, 0.35);
 }
 .cm-container {
   flex: 1;
