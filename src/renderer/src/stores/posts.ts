@@ -1,14 +1,17 @@
 import { defineStore } from 'pinia'
-import type { PostKind, PostMeta } from '@shared/ipc'
+import type { PostKind, PostMeta, SearchHit } from '@shared/ipc'
 
 export const usePostsStore = defineStore('posts', {
   state: () => ({
     posts: [] as PostMeta[],
     loaded: false,
-    keyword: ''
+    keyword: '',
+    /** 正文搜索结果；null 表示未启用搜索，列表走本地过滤 */
+    searchResults: null as SearchHit[] | null
   }),
   getters: {
-    filtered(state): PostMeta[] {
+    filtered(state): Array<PostMeta & { snippet?: string }> {
+      if (state.searchResults) return state.searchResults
       const kw = state.keyword.trim().toLowerCase()
       if (!kw) return state.posts
       return state.posts.filter(
@@ -29,6 +32,15 @@ export const usePostsStore = defineStore('posts', {
     async load(): Promise<void> {
       this.posts = await window.api.listPosts()
       this.loaded = true
+    },
+    async search(keyword: string): Promise<void> {
+      const kw = keyword.trim()
+      if (!kw) {
+        this.searchResults = null
+        return
+      }
+      const r = await window.api.searchPosts(kw)
+      if (r.ok && r.data) this.searchResults = r.data
     },
     async create(kind: PostKind, title: string): Promise<PostMeta | null> {
       const r = await window.api.createPost(kind, title)

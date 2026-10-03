@@ -10,7 +10,9 @@ export const useWorkspaceStore = defineStore('workspace', {
     building: null as BuildCommand | null,
     previewUrl: '',
     previewStarting: false,
-    previewIncludeDrafts: true
+    previewIncludeDrafts: true,
+    /** 站点文件变更计数，用于驱动预览 iframe 自动刷新 */
+    previewRefreshTick: 0
   }),
   actions: {
     init(): void {
@@ -23,6 +25,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       })
       window.api.onFsChanged(() => {
         usePostsStore().load()
+        if (this.previewUrl) this.previewRefreshTick++
       })
     },
     async runBuild(command: BuildCommand): Promise<BuildResult> {

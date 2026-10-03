@@ -2,7 +2,7 @@ import { promises as fs } from 'fs'
 import { existsSync } from 'fs'
 import { basename, join } from 'path'
 import matter from 'gray-matter'
-import type { PostDetail, PostKind, PostMeta, PostPatch } from '@shared/ipc'
+import type { PostDetail, PostKind, PostMeta, PostPatch, SearchHit } from '@shared/ipc'
 import { formatDate } from './site-service'
 
 const POSTS_DIR = '_posts'
@@ -182,8 +182,14 @@ export async function savePost(siteDir: string, id: string, patch: PostPatch): P
 
   if (patch.title !== undefined) data.title = patch.title
   if (patch.date !== undefined) data.date = patch.date
-  if (patch.tags !== undefined) data.tags = patch.tags.length ? patch.tags : null
-  if (patch.categories !== undefined) data.categories = patch.categories.length ? patch.categories : null
+  if (patch.tags !== undefined) {
+    if (patch.tags.length) data.tags = patch.tags
+    else delete data.tags
+  }
+  if (patch.categories !== undefined) {
+    if (patch.categories.length) data.categories = patch.categories
+    else delete data.categories
+  }
 
   const content = patch.content !== undefined ? patch.content : parsed.content
   let serialized = matter.stringify(content, data)
@@ -219,4 +225,39 @@ export async function publishDraft(siteDir: string, id: string): Promise<PostMet
   await fs.rename(from, to)
   const detail = await readPost(siteDir, pathToId('post', filename))
   return detail
+}
+
+function excerptAround(content: string, keyword: string, radius = 60): string {
+  const idx = content.toLowerCase().indexOf(keyword.toLowerCase())
+  if (idx < 0) return ''
+  const start = Math.max(0, idx - radius)
+  const end = Math.min(content.length, idx + keyword.length + radius)
+  return `${start > 0 ? '…' : ''}${content.slice(start, end).replace(/\s+/g, ' ')}${end < content.length ? '…' : ''}`
+}
+
+/** 全文搜索：标题/标签/分类即时命中；正文命中时附带摘录 */
+export async function searchPosts(siteDir: string, keyword: string): Promise<Array<SearchHit>> {
+  const kw = keyword.trim()
+  if (!kw) return []
+  const posts = await listPosts(siteDir)
+  const hits: Array<SearchHit> = []
+  for (const meta of posts) {
+    const kwLower = kw.toLowerCase()
+    const titleHit = meta.title.toLowerCase().includes(kwLower)
+    const tagHit = meta.tags.some((t) => t.toLowerCase().includes(kwLower))
+    const categoryHit = meta.categories.some((c) => c.toLowerCase().includes(kwLower))
+    if (titleHit || tagHit || categoryHit) {
+      hits.push({ ...meta })
+      continue
+    }
+    try {
+      const detail = await readPost(siteDir, meta.id)
+      if (detail.content.toLowerCase().includes(kwLower)) {
+        hits.push({ ...meta, snippet: excerptAround(detail.content, kw) })
+      }
+    } catch {
+      // 读取失败的文件跳过
+    }
+  }
+  return hits
 }

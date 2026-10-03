@@ -1,4 +1,6 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
+import { appendFile } from 'fs/promises'
+import { join } from 'path'
 import type { BuildCommand, PostKind, PostPatch, Result, SiteInfo } from '@shared/ipc'
 import type { AppConfig } from './services/config-service'
 import {
@@ -11,8 +13,10 @@ import {
   listPosts,
   publishDraft,
   readPost,
-  savePost
+  savePost,
+  searchPosts
 } from './services/post-service'
+import { saveImage } from './services/asset-service'
 import {
   findFreePort,
   runHexoBuild,
@@ -33,6 +37,13 @@ const EVT_FS = 'evt:fs'
 const EVT_PREVIEW_STOPPED = 'evt:preview-stopped'
 
 export function registerIpc(ctx: IpcContext): void {
+  // 渲染进程异常上报：落地到 userData/renderer-error.log，便于排查无控制台的打包环境
+  ipcMain.on('app:renderer-error', (_e, message: string) => {
+    console.error('[renderer]', message)
+    const line = `[${new Date().toISOString()}] ${message}\n`
+    appendFile(join(app.getPath('userData'), 'renderer-error.log'), line, 'utf8').catch(() => undefined)
+  })
+
   let currentSite: string | null = null
   let watcher: SourceWatch | null = null
   let preview: ServerSession | null = null
@@ -160,6 +171,22 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle('post:publishDraft', async (_e, id: string) => {
     try {
       return okResult(await publishDraft(requireSite(), id))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('post:search', async (_e, keyword: string) => {
+    try {
+      return currentSite ? okResult(await searchPosts(currentSite, keyword)) : okResult([])
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('asset:saveImage', async (_e, fileName: string, base64: string) => {
+    try {
+      return okResult(await saveImage(requireSite(), fileName, base64))
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }

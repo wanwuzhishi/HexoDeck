@@ -15,6 +15,8 @@ const api: Api = {
   savePost: (id: string, patch: PostPatch) => ipcRenderer.invoke('post:save', id, patch),
   deletePost: (id: string) => ipcRenderer.invoke('post:delete', id),
   publishDraft: (id: string) => ipcRenderer.invoke('post:publishDraft', id),
+  searchPosts: (keyword: string) => ipcRenderer.invoke('post:search', keyword),
+  saveImage: (fileName: string, base64: string) => ipcRenderer.invoke('asset:saveImage', fileName, base64),
 
   runBuild: (command: BuildCommand) => ipcRenderer.invoke('build:run', command),
   startPreview: (includeDrafts: boolean) => ipcRenderer.invoke('preview:start', includeDrafts),
@@ -34,7 +36,9 @@ const api: Api = {
     const handler = (): void => cb()
     ipcRenderer.on('evt:preview-stopped', handler)
     return () => ipcRenderer.removeListener('evt:preview-stopped', handler)
-  }
+  },
+
+  reportError: (message: string) => ipcRenderer.send('app:renderer-error', message)
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -19,6 +19,12 @@ export interface PostDetail extends PostMeta {
   content: string
 }
 
+/** 正文搜索命中项 */
+export interface SearchHit extends PostMeta {
+  /** 命中位置附近的正文摘录 */
+  snippet?: string
+}
+
 export interface PostPatch {
   title?: string
   date?: string
@@ -70,6 +76,10 @@ export interface Api {
   savePost(id: string, patch: PostPatch): Promise<Result>
   deletePost(id: string): Promise<Result>
   publishDraft(id: string): Promise<Result<PostMeta>>
+  /** 全文搜索（标题/标签/分类 + 正文），返回带摘录的命中项 */
+  searchPosts(keyword: string): Promise<Result<SearchHit[]>>
+  /** 保存图片到 source/images，返回可直接插入 Markdown 的 URL */
+  saveImage(fileName: string, base64: string): Promise<Result<string>>
 
   runBuild(command: BuildCommand): Promise<BuildResult>
   startPreview(includeDrafts: boolean): Promise<Result<string>>
@@ -78,4 +88,6 @@ export interface Api {
   onLog(cb: (line: string) => void): () => void
   onFsChanged(cb: () => void): () => void
   onPreviewStopped(cb: () => void): () => void
+  /** 渲染进程异常上报（主进程写入日志文件） */
+  reportError(message: string): void
 }

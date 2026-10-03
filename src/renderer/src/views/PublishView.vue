@@ -33,6 +33,14 @@ async function run(command: 'generate' | 'clean' | 'deploy'): Promise<void> {
 }
 
 watch(
+  () => ws.previewRefreshTick,
+  async () => {
+    await nextTick()
+    reloadFrame()
+  }
+)
+
+watch(
   () => ws.logs.length,
   async () => {
     await nextTick()

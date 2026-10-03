@@ -1,23 +1,19 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref, watch } from 'vue'
+import { computed, h, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { darkTheme, dateZhCN, NIcon, zhCN } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import { DocumentTextOutline, HomeOutline, RocketOutline } from '@vicons/ionicons5'
 import { useSiteStore } from './stores/site'
 import { useWorkspaceStore } from './stores/workspace'
+import { useUiStore } from './stores/ui'
 import { message } from './composables/message'
 
 const route = useRoute()
 const router = useRouter()
 const siteStore = useSiteStore()
 const workspace = useWorkspaceStore()
-
-const isDark = ref(localStorage.getItem('hexodeck-theme') === 'dark')
-watch(
-  isDark,
-  (v) => localStorage.setItem('hexodeck-theme', v ? 'dark' : 'light')
-)
+const ui = useUiStore()
 
 const renderIcon = (icon: unknown) => (): ReturnType<typeof h> =>
   h(NIcon, null, { default: () => h(icon as never) })
@@ -42,7 +38,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <n-config-provider :theme="isDark ? darkTheme : null" :locale="zhCN" :date-locale="dateZhCN">
+  <n-config-provider :theme="ui.isDark ? darkTheme : null" :locale="zhCN" :date-locale="dateZhCN">
     <n-message-provider>
       <n-layout has-sider class="root">
         <n-layout-sider bordered :width="190" content-style="display:flex;flex-direction:column;height:100%">

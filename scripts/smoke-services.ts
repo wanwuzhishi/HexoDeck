@@ -6,7 +6,15 @@
 import { promises as fs } from 'fs'
 import { join, resolve } from 'path'
 import { openSite } from '../src/main/services/site-service'
-import { createPost, deletePost, listPosts, readPost, savePost } from '../src/main/services/post-service'
+import {
+  createPost,
+  deletePost,
+  listPosts,
+  readPost,
+  savePost,
+  searchPosts
+} from '../src/main/services/post-service'
+import { saveImage } from '../src/main/services/asset-service'
 import {
   findFreePort,
   runHexoBuild,
@@ -58,6 +66,24 @@ async function main(): Promise<void> {
   })
   const list3 = await listPosts(siteDir)
   check('删除后列表不含草稿', !list3.some((p) => p.id === created.id))
+
+  // 6.5 图片保存（1x1 透明 PNG），校验后清理
+  const png1x1 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  const imgUrl = await saveImage(siteDir, '冒烟 测试.png', png1x1)
+  check('图片保存返回站点路径', /^\/images\/.+\.png$/.test(imgUrl), imgUrl)
+  const imgPath = join(siteDir, 'source', imgUrl)
+  const imgStat = await fs.stat(imgPath).catch(() => null)
+  check('图片已写入 source/images', !!imgStat && imgStat.size > 0)
+  if (imgStat) await fs.rm(imgPath)
+
+  // 6.6 全文搜索（正文命中 + 摘录）
+  const hits = await searchPosts(siteDir, 'Welcome to')
+  check(
+    '全文搜索正文命中 Hello World',
+    hits.some((h) => h.id.includes('hello-world') && h.snippet?.includes('Welcome')),
+    `${hits.length} 个命中`
+  )
 
   // 7. 生成静态页面（增量构建：无变更时输出 0 个文件，属正常）
   const publicIndex = join(siteDir, 'public', 'index.html')

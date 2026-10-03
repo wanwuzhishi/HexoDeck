@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onMounted, ref } from 'vue'
+import { h, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NButton,
@@ -16,8 +16,20 @@ import { usePostsStore } from '../stores/posts'
 import { message } from '../composables/message'
 import type { PostMeta } from '@shared/ipc'
 
+type PostRow = PostMeta & { snippet?: string }
+
 const posts = usePostsStore()
 const router = useRouter()
+
+// 关键词变化 300ms 后触发正文搜索（标题/标签即时本地过滤）
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  () => posts.keyword,
+  (kw) => {
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => posts.search(kw), 300)
+  }
+)
 
 const showCreate = ref(false)
 const createKind = ref<'post' | 'draft'>('post')
@@ -32,21 +44,27 @@ async function remove(row: PostMeta): Promise<void> {
   try {
     await posts.remove(row.id)
     message.success('已删除（移入回收站）')
+    await posts.search(posts.keyword)
   } catch (e) {
     message.error((e as Error).message)
   }
 }
 
-const columns: DataTableColumns<PostMeta> = [
+const columns: DataTableColumns<PostRow> = [
   {
     title: '标题',
     key: 'title',
     render: (row) =>
-      h(
-        'a',
-        { class: 'post-link', onClick: () => openEditor(row) },
-        row.title
-      )
+      h('div', [
+        h(
+          'a',
+          { class: 'post-link', onClick: () => openEditor(row) },
+          row.title
+        ),
+        row.snippet
+          ? h('div', { class: 'snippet', title: row.snippet }, `正文匹配：${row.snippet}`)
+          : null
+      ])
   },
   {
     title: '状态',
@@ -178,5 +196,14 @@ onMounted(() => {
 }
 .muted-cell {
   opacity: 0.4;
+}
+.snippet {
+  font-size: 12px;
+  opacity: 0.55;
+  max-width: 420px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
 }
 </style>
