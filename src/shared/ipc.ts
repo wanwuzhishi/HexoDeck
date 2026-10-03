@@ -124,6 +124,22 @@ export interface ThemeConfigFile {
   created: boolean
 }
 
+/** 配置文件路径设定的对象：站点 _config.yml 或当前主题的 YAML 配置 */
+export type ConfigPathKind = 'site' | 'theme'
+
+/** 配置文件路径记忆状态（首次打开时弹窗由用户指定，之后记住不再询问） */
+export interface ConfigPathInfo {
+  kind: ConfigPathKind
+  /** kind=theme 时对应的主题名 */
+  theme?: string
+  /** 已记住的路径；null 表示尚未指定（下次打开会再次弹窗） */
+  path: string | null
+  /** 已记住的路径文件当前是否存在 */
+  exists: boolean
+  /** 约定俗成的默认路径（弹窗中展示，可一键采用） */
+  defaultPath: string
+}
+
 export interface PluginInfo {
   name: string
   version: string
@@ -246,9 +262,17 @@ export interface Api {
   readSiteConfig(): Promise<Result<SiteConfigForm>>
   saveBaseConfig(patch: SiteConfigPatch): Promise<Result>
   saveDeployConfig(deploy: DeployConfig): Promise<Result>
-  /** 高级：直接读写 _config.yml 原文（保存前校验 + 备份） */
+  /** 高级：直接读写配置文件原文（保存前校验 + 备份）。路径由用户指定并记忆，不再自动定位 */
   readRawConfig(): Promise<Result<{ path: string; content: string }>>
   saveRawConfig(content: string): Promise<Result>
+  /** 配置文件路径记忆：查询当前站点/主题的设定状态 */
+  getConfigPath(kind: ConfigPathKind): Promise<Result<ConfigPathInfo>>
+  /** 弹出文件对话框选择配置文件路径并记住（取消时 ok=false、error='canceled'） */
+  pickConfigPath(kind: ConfigPathKind): Promise<Result<ConfigPathInfo>>
+  /** 采用约定默认路径并记住 */
+  useDefaultConfigPath(kind: ConfigPathKind): Promise<Result<ConfigPathInfo>>
+  /** 清除路径记忆（下次打开重新弹窗询问） */
+  clearConfigPath(kind: ConfigPathKind): Promise<Result<ConfigPathInfo>>
   listThemes(): Promise<Result<ThemeInfo[]>>
   switchTheme(name: string): Promise<Result>
   /** 打开文件对话框选择主题压缩包并安装 */

@@ -7,6 +7,7 @@ import {
   NIcon,
   NInput,
   NInputNumber,
+  NModal,
   NPopconfirm,
   NProgress,
   NRadioButton,
@@ -26,7 +27,7 @@ import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
 import CodeEditor from '../components/CodeEditor.vue'
 import appIcon from '../assets/app-icon.png'
-import type { AppInfo, PluginInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
+import type { AppInfo, ConfigPathInfo, ConfigPathKind, PluginInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
 
 const site = useSiteStore()
 const ws = useWorkspaceStore()
@@ -84,18 +85,121 @@ const deployTypeOptions = [
 // ---------- 主题 ----------
 const themes = ref<ThemeInfo[]>([])
 const switchingTheme = ref('')
+/** 当前活动主题名（用于主题配置的路径记忆与展示；基础表单不含此字段，单独维护） */
+const activeTheme = ref('')
 const themeFile = ref<ThemeConfigFile | null>(null)
 const themeContent = ref('')
 const savingTheme = ref(false)
 const installingTheme = ref('')
 
-// ---------- 高级（_config.yml 原文直编） ----------
+// ---------- 高级（配置文件原文直编，路径由用户指定） ----------
 const rawFile = ref<{ path: string; content: string } | null>(null)
 const rawContent = ref('')
 const savingRaw = ref(false)
 const rawLoaded = ref(false)
 const rawEditorRef = ref<InstanceType<typeof CodeEditor> | null>(null)
 const keySearch = ref('')
+
+// ---------- 配置文件路径记忆 ----------
+// 主题 YAML 与站点 _config.yml 都不自动定位：每个站点/主题第一次打开时弹窗
+// 让用户指定路径，指定后按「站点」「站点+主题」记住，之后再打开不再询问。
+const rawPathInfo = ref<ConfigPathInfo | null>(null)
+const themePathInfo = ref<ConfigPathInfo | null>(null)
+const pathModalKind = ref<ConfigPathKind | null>(null)
+const pathBusy = ref(false)
+
+const hasRawPath = computed(() => !!rawPathInfo.value?.path)
+
+const pathModalInfo = computed(() =>
+  pathModalKind.value === 'site' ? rawPathInfo.value : themePathInfo.value
+)
+
+const pathModalTitle = computed(() =>
+  pathModalKind.value === 'site' ? '设置 Hexo 配置文件路径' : `设置主题「${activeTheme.value}」配置文件路径`
+)
+
+function openPathModal(kind: ConfigPathKind): void {
+  pathModalKind.value = kind
+}
+
+function closePathModal(v: boolean): void {
+  if (!v) pathModalKind.value = null
+}
+
+/** 路径设定变更后清空旧内容，重新走载入流程 */
+function reloadAfterPathChange(kind: ConfigPathKind): void {
+  if (kind === 'site') {
+    rawFile.value = null
+    rawContent.value = ''
+    rawLoaded.value = false
+    void loadRawConfig()
+  } else {
+    themeFile.value = null
+    themeContent.value = ''
+    void loadThemeConfig()
+  }
+}
+
+async function browseConfigPath(): Promise<void> {
+  const kind = pathModalKind.value
+  if (!kind) return
+  pathBusy.value = true
+  try {
+    const r = await window.api.pickConfigPath(kind)
+    if (r.ok && r.data) {
+      pathModalKind.value = null
+      reloadAfterPathChange(kind)
+    } else if (r.error && r.error !== 'canceled') {
+      message.error(r.error)
+    }
+  } finally {
+    pathBusy.value = false
+  }
+}
+
+async function applyDefaultPath(): Promise<void> {
+  const kind = pathModalKind.value
+  if (!kind) return
+  pathBusy.value = true
+  try {
+    const r = await window.api.useDefaultConfigPath(kind)
+    if (r.ok && r.data) {
+      pathModalKind.value = null
+      reloadAfterPathChange(kind)
+    } else {
+      message.error(r.error ?? '设置失败')
+    }
+  } finally {
+    pathBusy.value = false
+  }
+}
+
+async function clearRememberedPath(): Promise<void> {
+  const kind = pathModalKind.value
+  if (!kind) return
+  pathBusy.value = true
+  try {
+    const r = await window.api.clearConfigPath(kind)
+    if (r.ok && r.data) {
+      if (kind === 'site') {
+        rawPathInfo.value = r.data
+        rawFile.value = null
+        rawContent.value = ''
+        rawLoaded.value = false
+      } else {
+        themePathInfo.value = r.data
+        themeFile.value = null
+        themeContent.value = ''
+      }
+      pathModalKind.value = null
+      message.success('已清除路径记忆，下次打开配置时将重新询问')
+    } else {
+      message.error(r.error ?? '操作失败')
+    }
+  } finally {
+    pathBusy.value = false
+  }
+}
 
 /** 插件配置键搜索：按包名 / 配置键 / 说明过滤 */
 const filteredPlugins = computed(() => {
@@ -245,6 +349,7 @@ async function loadAll(): Promise<void> {
     if (cfg.ok && cfg.data) {
       Object.assign(base, cfg.data)
       Object.assign(deploy, cfg.data.deploy)
+      activeTheme.value = cfg.data.theme
     }
     if (th.ok && th.data) themes.value = th.data
     if (pl.ok && pl.data) plugins.value = pl.data
@@ -379,6 +484,19 @@ async function pickThemeArchive(): Promise<void> {
 }
 
 async function loadThemeConfig(): Promise<void> {
+  const pi = await window.api.getConfigPath('theme')
+  if (pi.ok && pi.data) themePathInfo.value = pi.data
+  if (!pi.ok || !pi.data?.path) {
+    themeFile.value = null
+    themeContent.value = ''
+    if (pi.ok) {
+      // 该主题首次打开：弹窗指定配置文件路径，不自动定位
+      pathModalKind.value = 'theme'
+    } else {
+      message.error(pi.error ?? '读取路径设定失败')
+    }
+    return
+  }
   const r = await window.api.readThemeConfig()
   if (r.ok && r.data) {
     themeFile.value = r.data
@@ -403,15 +521,32 @@ async function saveTheme(): Promise<void> {
   }
 }
 
-async function loadRawConfig(): Promise<void> {
+/** 载入站点配置原文；返回 false 表示路径未指定（已弹窗）或读取失败 */
+async function loadRawConfig(): Promise<boolean> {
+  const pi = await window.api.getConfigPath('site')
+  if (pi.ok && pi.data) rawPathInfo.value = pi.data
+  // 站点配置要求文件真实存在：未指定或文件已不存在时都弹窗重新指定
+  if (!pi.ok || !pi.data?.path || !pi.data.exists) {
+    rawFile.value = null
+    rawContent.value = ''
+    rawLoaded.value = false
+    if (pi.ok) {
+      // 该站点首次打开（或已记住的文件丢失）：弹窗指定路径
+      pathModalKind.value = 'site'
+    } else {
+      message.error(pi.error ?? '读取路径设定失败')
+    }
+    return false
+  }
   const r = await window.api.readRawConfig()
   if (r.ok && r.data) {
     rawFile.value = r.data
     rawContent.value = r.data.content
     rawLoaded.value = true
-  } else {
-    message.error(r.error ?? '读取配置文件失败')
+    return true
   }
+  message.error(r.error ?? '读取配置文件失败')
+  return false
 }
 
 async function saveRaw(): Promise<void> {
@@ -463,7 +598,7 @@ async function openPluginSettings(p: PluginInfo): Promise<void> {
     message.info('主题类插件的设置在「主题」标签页编辑')
     return
   }
-  await loadRawConfig()
+  if (!(await loadRawConfig())) return
   if (!p.configKey) {
     message.info(`${p.name} 没有独立配置键，可在编辑器中直接修改相关配置`)
     return
@@ -533,11 +668,31 @@ const languageOptions = [
 ]
 
 // 首次进入加载；站点切换后重载
-onMounted(loadAll)
+onMounted(() => {
+  void loadAll()
+  // 直链进入（如 /settings?tab=advanced）时 activeTab 不发生变化，需主动补载
+  if (activeTab.value === 'advanced') void loadRawConfig()
+})
 watch(
   () => site.site?.path,
   () => {
-    if (site.site) loadAll()
+    if (site.site) {
+      // 路径记忆按「站点/站点+主题」隔离：换站点后主题编辑器内容与已载入信息全部失效
+      themeFile.value = null
+      themeContent.value = ''
+      themePathInfo.value = null
+      loadAll()
+    }
+  }
+)
+// 活动主题变化（切换主题/换站点后读到新主题）：主题配置需重新指定与载入
+watch(
+  activeTheme,
+  () => {
+    themeFile.value = null
+    themeContent.value = ''
+    themePathInfo.value = null
+    if (activeTab.value === 'theme') void loadThemeConfig()
   }
 )
 watch(activeTab, (tab) => {
@@ -661,16 +816,29 @@ watch(activeTab, (tab) => {
         <section class="glass panel">
           <div class="panel-head-row">
             <div class="panel-title">当前主题配置（YAML）</div>
-            <span v-if="themeFile" class="muted small path">{{ themeFile.path }}{{ themeFile.created ? '（新建的覆盖文件）' : '' }}</span>
+            <n-space align="center" :size="10">
+              <span v-if="themePathInfo?.path" class="muted small path" :title="themePathInfo.path">
+                {{ themePathInfo.path }}{{ themeFile?.created ? '（新建的覆盖文件）' : '' }}
+              </span>
+              <span v-else class="muted small">尚未指定路径</span>
+              <n-button size="tiny" secondary @click="openPathModal('theme')">自定义路径</n-button>
+            </n-space>
           </div>
-          <div class="code-editor-wrap theme-editor">
-            <CodeEditor ref="themeEditorRef" v-model="themeContent" :dark="ui.isDark" />
+          <template v-if="themePathInfo?.path">
+            <div class="code-editor-wrap theme-editor">
+              <CodeEditor v-model="themeContent" :dark="ui.isDark" />
+            </div>
+            <n-space style="margin-top: 10px">
+              <n-button type="primary" :loading="savingTheme" @click="saveTheme">保存主题配置</n-button>
+              <n-button quaternary @click="loadThemeConfig">放弃修改</n-button>
+              <span class="muted small">保存前会做 YAML 语法校验</span>
+            </n-space>
+          </template>
+          <div v-else class="path-empty">
+            为避免误改，HexoDeck 不会自动定位主题配置文件。点击「自定义路径」为主题「{{ activeTheme || '当前' }}」选择
+            YAML 配置文件（可以是站点根的 <code>_config.主题名.yml</code> 覆盖文件，也可以是主题自带配置）；
+            指定后会按主题记住，之后打开不再询问。
           </div>
-          <n-space style="margin-top: 10px">
-            <n-button type="primary" :loading="savingTheme" @click="saveTheme">保存主题配置</n-button>
-            <n-button quaternary @click="loadThemeConfig">放弃修改</n-button>
-            <span class="muted small">保存前会做 YAML 语法校验</span>
-          </n-space>
         </section>
 
         <section class="glass panel">
@@ -740,8 +908,12 @@ watch(activeTab, (tab) => {
           <div class="panel-head-row">
             <div class="panel-title">Hexo 配置文件（_config.yml）</div>
             <n-space align="center" :size="10">
-              <span v-if="rawFile" class="muted small path">{{ rawFile.path }}</span>
-              <n-button size="tiny" secondary title="搜索配置文件内容（Ctrl+F）" @click="openRawSearch">
+              <span v-if="rawPathInfo?.path" class="muted small path" :title="rawPathInfo.path">
+                {{ rawPathInfo.path }}<template v-if="!rawPathInfo.exists">（文件不存在，请重新指定）</template>
+              </span>
+              <span v-else class="muted small">尚未指定路径</span>
+              <n-button size="tiny" secondary @click="openPathModal('site')">自定义路径</n-button>
+              <n-button size="tiny" secondary :disabled="!hasRawPath" title="搜索配置文件内容（Ctrl+F）" @click="openRawSearch">
                 <template #icon>
                   <n-icon :component="SearchOutline" />
                 </template>
@@ -751,16 +923,22 @@ watch(activeTab, (tab) => {
           </div>
           <div class="muted small" style="margin-bottom: 10px">
             直接编辑配置文件原文，适合配置表单未覆盖的字段和各插件的个性化配置。保存前自动校验
-            YAML 并备份原文件为 _config.yml.hexodeck.bak；保存后预览会自动重启。
+            YAML 并备份原文件为 *.hexodeck.bak；保存后预览会自动重启。
           </div>
-          <div class="code-editor-wrap raw-editor">
-            <CodeEditor ref="rawEditorRef" v-model="rawContent" :dark="ui.isDark" />
+          <template v-if="rawPathInfo?.path">
+            <div class="code-editor-wrap raw-editor">
+              <CodeEditor ref="rawEditorRef" v-model="rawContent" :dark="ui.isDark" />
+            </div>
+            <n-space style="margin-top: 10px">
+              <n-button type="primary" :loading="savingRaw" @click="saveRaw">保存配置文件</n-button>
+              <n-button quaternary @click="loadRawConfig">放弃修改</n-button>
+              <span class="muted small">插件设置：在「插件」页点「设置」可直达对应配置键，也可点击下方插件键插入</span>
+            </n-space>
+          </template>
+          <div v-else class="path-empty">
+            为避免误改，HexoDeck 不会自动定位本站点的 Hexo 配置文件。点击「自定义路径」选择站点的
+            <code>_config.yml</code>（或你实际使用的配置文件）；指定后会按站点记住，之后打开不再询问。
           </div>
-          <n-space style="margin-top: 10px">
-            <n-button type="primary" :loading="savingRaw" @click="saveRaw">保存配置文件</n-button>
-            <n-button quaternary @click="loadRawConfig">放弃修改</n-button>
-            <span class="muted small">插件设置：在「插件」页点「设置」可直达对应配置键，也可点击下方插件键插入</span>
-          </n-space>
         </section>
 
         <section class="glass panel">
@@ -919,6 +1097,58 @@ watch(activeTab, (tab) => {
         </section>
       </n-tab-pane>
     </n-tabs>
+
+    <!-- 配置文件路径指定弹窗：站点/主题首次打开时自动弹出，指定后记住 -->
+    <n-modal
+      :show="pathModalKind !== null"
+      preset="card"
+      :title="pathModalTitle"
+      style="width: 580px"
+      :mask-closable="false"
+      @update:show="closePathModal"
+    >
+      <div class="path-modal-body">
+        <p class="path-modal-text">
+          {{
+            pathModalKind === 'site'
+              ? 'HexoDeck 不会自动定位本站点的 Hexo 配置文件，请指定要编辑的 _config.yml。'
+              : `HexoDeck 不会自动定位主题配置文件，请指定主题「${activeTheme}」要编辑的 YAML 配置文件。`
+          }}
+          路径将按{{ pathModalKind === 'site' ? '站点' : '主题' }}记住，之后再打开无需重新选择。
+        </p>
+        <div class="path-row">
+          <span class="path-row-label">默认位置</span>
+          <span class="mono">{{ pathModalInfo?.defaultPath }}</span>
+        </div>
+        <div class="path-row">
+          <span class="path-row-label">当前记录</span>
+          <span v-if="pathModalInfo?.path" class="mono">
+            {{ pathModalInfo.path }}<span v-if="!pathModalInfo.exists">（文件不存在，请重新选择）</span>
+          </span>
+          <span v-else class="muted small">尚未指定</span>
+        </div>
+      </div>
+      <template #footer>
+        <div class="path-modal-foot">
+          <n-button
+            v-if="pathModalInfo?.path"
+            size="small"
+            quaternary
+            type="error"
+            :disabled="pathBusy"
+            @click="clearRememberedPath"
+          >
+            清除记录
+          </n-button>
+          <span v-else></span>
+          <n-space :size="8">
+            <n-button size="small" :disabled="pathBusy" @click="closePathModal(true)">取消</n-button>
+            <n-button size="small" secondary :loading="pathBusy" @click="applyDefaultPath">使用默认位置</n-button>
+            <n-button size="small" type="primary" :loading="pathBusy" @click="browseConfigPath">浏览选择…</n-button>
+          </n-space>
+        </div>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -1012,6 +1242,63 @@ watch(activeTab, (tab) => {
 
 .path {
   word-break: break-all;
+}
+
+/* 路径未指定时的占位说明 */
+.path-empty {
+  padding: 16px 14px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.8;
+}
+
+.path-empty code {
+  font-family: var(--mono);
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* 路径指定弹窗 */
+.path-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.path-modal-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-1);
+}
+
+.path-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.path-row .mono {
+  word-break: break-all;
+  color: var(--text-1);
+}
+
+.path-row-label {
+  flex: none;
+  width: 60px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.path-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .theme-grid,

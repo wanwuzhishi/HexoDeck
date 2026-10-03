@@ -56,11 +56,11 @@ function dedupeTopLevelKeys(lines: string[]): void {
   }
 }
 
-/** 首次修改前备份原始 _config.yml（仅备份一次，保留用户可手动回退的副本） */
-async function backupOnce(siteDir: string): Promise<void> {
-  const bak = configPath(siteDir) + BACKUP_SUFFIX
+/** 首次修改前备份原文件（仅备份一次，保留用户可手动回退的副本） */
+async function backupOnce(file: string): Promise<void> {
+  const bak = file + BACKUP_SUFFIX
   if (!existsSync(bak)) {
-    await fs.copyFile(configPath(siteDir), bak)
+    await fs.copyFile(file, bak)
   }
 }
 
@@ -152,20 +152,20 @@ export async function readSiteConfig(siteDir: string): Promise<SiteConfigForm> {
   return toForm(data)
 }
 
-/** 高级：读取 _config.yml 原文 */
-export async function readRawConfig(siteDir: string): Promise<{ path: string; content: string }> {
-  return { path: configPath(siteDir), content: await readText(siteDir) }
+/** 高级：读取配置文件原文（路径由用户指定并记忆，由 ipc 层解析） */
+export async function readRawConfig(path: string): Promise<{ path: string; content: string }> {
+  return { path, content: await fs.readFile(path, 'utf8') }
 }
 
-/** 高级：保存 _config.yml 原文（YAML 校验 + 备份） */
-export async function saveRawConfig(siteDir: string, content: string): Promise<void> {
+/** 高级：保存配置文件原文（YAML 校验 + 备份） */
+export async function saveRawConfig(path: string, content: string): Promise<void> {
   try {
     loadYaml(content, { json: true })
   } catch (e) {
     throw new Error(`YAML 语法错误：${(e as Error).message.split('\n')[0]}`)
   }
-  await backupOnce(siteDir)
-  await fs.writeFile(configPath(siteDir), content, 'utf8')
+  await backupOnce(path)
+  await fs.writeFile(path, content, 'utf8')
 }
 
 export interface BasePatch {
@@ -183,7 +183,7 @@ export interface BasePatch {
 }
 
 export async function saveBaseConfig(siteDir: string, patch: BasePatch): Promise<void> {
-  await backupOnce(siteDir)
+  await backupOnce(configPath(siteDir))
   const { lines, eol } = await readLines(siteDir)
   const strKeys = ['title', 'subtitle', 'description', 'author', 'language', 'timezone', 'url', 'root', 'permalink'] as const
   for (const k of strKeys) {
@@ -201,14 +201,14 @@ export async function saveBaseConfig(siteDir: string, patch: BasePatch): Promise
 }
 
 export async function saveDeployConfig(siteDir: string, deploy: DeployConfig): Promise<void> {
-  await backupOnce(siteDir)
+  await backupOnce(configPath(siteDir))
   const { lines, eol } = await readLines(siteDir)
   setDeployBlock(lines, deploy)
   await writeLines(siteDir, lines, eol)
 }
 
 export async function switchTheme(siteDir: string, name: string): Promise<void> {
-  await backupOnce(siteDir)
+  await backupOnce(configPath(siteDir))
   const { lines, eol } = await readLines(siteDir)
   setScalarLine(lines, 'theme', scalar(name))
   await writeLines(siteDir, lines, eol)
@@ -254,8 +254,9 @@ export async function listThemes(siteDir: string): Promise<ThemeInfo[]> {
   return [...found.values()].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
 }
 
-/** 主题配置文件：优先站点根的 _config.<theme>.yml 覆盖文件，其次主题自带 _config.yml */
-function themeConfigPath(siteDir: string, theme: string): string {
+/** 主题配置文件的约定默认路径：优先站点根的 _config.<theme>.yml 覆盖文件，其次主题自带 _config.yml。
+ * 仅作为弹窗中的默认建议，不再自动用于打开文件（路径由用户指定并记忆）。 */
+export function defaultThemeConfigPath(siteDir: string, theme: string): string {
   const alt = join(siteDir, `_config.${theme}.yml`)
   if (existsSync(alt)) return alt
   const inTheme = join(siteDir, 'themes', theme, '_config.yml')
@@ -263,28 +264,23 @@ function themeConfigPath(siteDir: string, theme: string): string {
   return alt // 不存在时约定新建覆盖文件
 }
 
-export async function readThemeConfig(siteDir: string): Promise<ThemeConfigFile> {
-  const theme = (await readSiteConfig(siteDir)).theme
-  if (!theme) throw new Error('未设置主题')
-  const path = themeConfigPath(siteDir, theme)
+export async function readThemeConfig(path: string): Promise<ThemeConfigFile> {
   if (existsSync(path)) {
     return { path, content: await fs.readFile(path, 'utf8'), created: false }
   }
   return { path, content: '', created: true }
 }
 
-export async function saveThemeConfig(siteDir: string, content: string): Promise<ThemeConfigFile> {
-  const theme = (await readSiteConfig(siteDir)).theme
-  if (!theme) throw new Error('未设置主题')
+export async function saveThemeConfig(path: string, content: string): Promise<ThemeConfigFile> {
   // 保存前校验 YAML 合法性，避免写坏主题配置
   try {
     loadYaml(content, { json: true })
   } catch (e) {
     throw new Error(`YAML 语法错误：${(e as Error).message.split('\n')[0]}`)
   }
-  const path = themeConfigPath(siteDir, theme)
+  const created = !existsSync(path)
   await fs.writeFile(path, content, 'utf8')
-  return { path, content, created: !existsSync(path) }
+  return { path, content, created }
 }
 
 const KNOWN_PLUGINS: Record<string, { desc: string; key?: string }> = {

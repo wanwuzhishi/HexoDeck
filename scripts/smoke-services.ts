@@ -16,6 +16,7 @@ import {
 } from '../src/main/services/post-service'
 import { saveImage } from '../src/main/services/asset-service'
 import {
+  defaultThemeConfigPath,
   listPlugins,
   listThemes,
   readSiteConfig,
@@ -160,11 +161,15 @@ async function main(): Promise<void> {
   const cfg5 = await readSiteConfig(tmpSite)
   check('主题切换写入', cfg5.theme === 'butterfly')
 
-  const tcfg = await readThemeConfig(tmpSite)
-  check('主题覆盖配置创建', tcfg.created && tcfg.path.includes('_config.butterfly.yml'))
-  await saveThemeConfig(tmpSite, 'theme_config:\n  index: 1\n')
-  const tcfg2 = await readThemeConfig(tmpSite)
+  // 主题配置：路径由调用方显式给定（界面层由用户指定并记忆，不再自动定位）
+  const themeCfgPath = defaultThemeConfigPath(tmpSite, 'butterfly')
+  check('主题配置默认路径指向覆盖文件', themeCfgPath.includes('_config.butterfly.yml'), themeCfgPath)
+  const tcfg = await readThemeConfig(themeCfgPath)
+  check('主题覆盖配置创建', tcfg.created)
+  await saveThemeConfig(themeCfgPath, 'theme_config:\n  index: 1\n')
+  const tcfg2 = await readThemeConfig(themeCfgPath)
   check('主题配置保存回读', tcfg2.content.includes('index: 1'))
+  check('保存后 created 归位为 false', !tcfg2.created)
 
   const pl = await listPlugins(tmpSite)
   check('插件识别', pl.some((p) => p.name === 'hexo-renderer-marked'))

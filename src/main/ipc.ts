@@ -1,8 +1,19 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
+import { existsSync } from 'fs'
 import { appendFile } from 'fs/promises'
-import { join } from 'path'
-import type { AppSettings, BuildCommand, PostKind, PostPatch, Result, SiteInfo } from '@shared/ipc'
+import { dirname, join } from 'path'
+import type {
+  AppSettings,
+  BuildCommand,
+  ConfigPathInfo,
+  ConfigPathKind,
+  PostKind,
+  PostPatch,
+  Result,
+  SiteInfo
+} from '@shared/ipc'
 import type { AppConfig } from './services/config-service'
+import { siteConfigKey, themeConfigKey } from './services/config-service'
 import { getLogFile, logLine } from './services/logger'
 import { runtimeFlags } from './services/runtime-flags'
 import {
@@ -29,6 +40,7 @@ import { saveImage } from './services/asset-service'
 import { installThemeFromArchive, isArchive } from './services/theme-archive-service'
 import { collectStats } from './services/stats-service'
 import {
+  defaultThemeConfigPath,
   listPlugins,
   listThemes,
   readRawConfig,
@@ -319,6 +331,95 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ============ 站点配置 / 主题 / 插件（M3） ============
 
+  // ---- 配置文件路径记忆：主题 YAML 与站点 _config.yml 均由用户指定，不自动定位 ----
+
+  /** 解析当前站点/主题对应的记忆键与约定默认路径 */
+  const resolvePathTarget = async (
+    kind: ConfigPathKind
+  ): Promise<{ key: string; defaultPath: string; theme?: string }> => {
+    const site = requireSite()
+    if (kind === 'site') {
+      return { key: siteConfigKey(site), defaultPath: join(site, '_config.yml') }
+    }
+    const theme = (await readSiteConfig(site)).theme
+    if (!theme) throw new Error('未设置主题，请先在「基础配置」中选择主题')
+    return { key: themeConfigKey(site, theme), defaultPath: defaultThemeConfigPath(site, theme), theme }
+  }
+
+  const getPathInfo = async (kind: ConfigPathKind): Promise<ConfigPathInfo> => {
+    const t = await resolvePathTarget(kind)
+    const path = await ctx.config.getConfigPath(t.key)
+    return { kind, theme: t.theme, path, exists: path ? existsSync(path) : false, defaultPath: t.defaultPath }
+  }
+
+  /** 读/写配置文件前取已记住的路径；未指定时明确报错，引导用户去点「自定义路径」 */
+  const requireConfigPath = async (kind: ConfigPathKind): Promise<string> => {
+    const t = await resolvePathTarget(kind)
+    const path = await ctx.config.getConfigPath(t.key)
+    if (!path) {
+      throw new Error(
+        kind === 'site'
+          ? '尚未指定 Hexo 配置文件路径，请在「设置 → 高级」点击「自定义路径」选择'
+          : '尚未指定主题配置文件路径，请在「设置 → 主题」点击「自定义路径」选择'
+      )
+    }
+    return path
+  }
+
+  ipcMain.handle('config:getPath', async (_e, kind: ConfigPathKind) => {
+    try {
+      return okResult(await getPathInfo(kind))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('config:pickPath', async (_e, kind: ConfigPathKind) => {
+    try {
+      const t = await resolvePathTarget(kind)
+      const picked = await dialog.showOpenDialog({
+        title:
+          kind === 'site'
+            ? '选择 Hexo 配置文件（_config.yml）'
+            : `选择主题「${t.theme}」的配置文件（YAML）`,
+        filters: [
+          { name: 'YAML 配置文件', extensions: ['yml', 'yaml'] },
+          { name: '所有文件', extensions: ['*'] }
+        ],
+        properties: ['openFile'],
+        defaultPath: dirname(t.defaultPath)
+      })
+      if (picked.canceled || picked.filePaths.length === 0) return { ok: false, error: 'canceled' }
+      await ctx.config.setConfigPath(t.key, picked.filePaths[0])
+      void logLine(`配置文件路径已指定（${kind === 'site' ? '站点配置' : `主题 ${t.theme}`}）: ${picked.filePaths[0]}`)
+      return okResult(await getPathInfo(kind))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('config:useDefaultPath', async (_e, kind: ConfigPathKind) => {
+    try {
+      const t = await resolvePathTarget(kind)
+      await ctx.config.setConfigPath(t.key, t.defaultPath)
+      void logLine(`配置文件路径采用默认位置（${kind === 'site' ? '站点配置' : `主题 ${t.theme}`}）: ${t.defaultPath}`)
+      return okResult(await getPathInfo(kind))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('config:clearPath', async (_e, kind: ConfigPathKind) => {
+    try {
+      const t = await resolvePathTarget(kind)
+      await ctx.config.clearConfigPath(t.key)
+      void logLine(`已清除配置文件路径记忆（${kind === 'site' ? '站点配置' : `主题 ${t.theme}`}）`)
+      return okResult(await getPathInfo(kind))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
   ipcMain.handle('config:read', async () => {
     try {
       return okResult(await readSiteConfig(requireSite()))
@@ -349,7 +450,7 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('config:readRaw', async () => {
     try {
-      return okResult(await readRawConfig(requireSite()))
+      return okResult(await readRawConfig(await requireConfigPath('site')))
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }
@@ -357,8 +458,9 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('config:saveRaw', async (_e, content: string) => {
     try {
-      await saveRawConfig(requireSite(), content)
-      onLog('✓ _config.yml 已保存（原文件备份于 _config.yml.hexodeck.bak）')
+      const path = await requireConfigPath('site')
+      await saveRawConfig(path, content)
+      onLog(`✓ 配置文件已保存：${path}（首次修改已自动备份为 *.hexodeck.bak）`)
       return okResult()
     } catch (e) {
       return { ok: false, error: (e as Error).message }
@@ -415,7 +517,7 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('theme:readConfig', async () => {
     try {
-      return okResult(await readThemeConfig(requireSite()))
+      return okResult(await readThemeConfig(await requireConfigPath('theme')))
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }
@@ -423,7 +525,7 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('theme:saveConfig', async (_e, content: string) => {
     try {
-      const r = await saveThemeConfig(requireSite(), content)
+      const r = await saveThemeConfig(await requireConfigPath('theme'), content)
       onLog(`✓ 主题配置已保存：${r.path}`)
       return okResult(r)
     } catch (e) {
