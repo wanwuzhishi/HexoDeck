@@ -41,12 +41,28 @@ function toCategories(v: unknown): string[] {
   return flat
 }
 
-function metaFrom(id: string, kind: PostKind, raw: string, content: string, data: Record<string, unknown>): PostMeta {
+function metaFrom(
+  id: string,
+  kind: PostKind,
+  raw: string,
+  content: string,
+  data: Record<string, unknown>,
+  mtimeMs?: number
+): PostMeta {
+  // front-matter 无 date 时回退到文件修改时间（与 hexo 生成行为一致）
+  const date =
+    data.date != null
+      ? data.date instanceof Date
+        ? formatDate(data.date)
+        : String(data.date)
+      : mtimeMs != null
+        ? formatDate(new Date(mtimeMs))
+        : ''
   return {
     id,
     kind,
     title: String(data.title ?? basename(id).replace(MD_EXT, '')),
-    date: data.date instanceof Date ? formatDate(data.date) : String(data.date ?? ''),
+    date,
     tags: toTags(data.tags),
     categories: toCategories(data.categories),
     wordCount: content.replace(/\s/g, '').length
@@ -65,9 +81,20 @@ async function listKind(siteDir: string, kind: PostKind): Promise<PostMeta[]> {
   for (const name of names) {
     if (!MD_EXT.test(name)) continue
     try {
-      const raw = await fs.readFile(join(dir, name), 'utf8')
+      const filePath = join(dir, name)
+      const raw = await fs.readFile(filePath, 'utf8')
+      const stat = await fs.stat(filePath)
       const parsed = matter(raw)
-      metas.push(metaFrom(pathToId(kind, name), kind, raw, parsed.content, parsed.data as Record<string, unknown>))
+      metas.push(
+        metaFrom(
+          pathToId(kind, name),
+          kind,
+          raw,
+          parsed.content,
+          parsed.data as Record<string, unknown>,
+          stat.mtimeMs
+        )
+      )
     } catch {
       // 单个文件解析失败不阻塞列表，跳过
     }
@@ -82,12 +109,14 @@ export async function listPosts(siteDir: string): Promise<PostMeta[]> {
 }
 
 export async function readPost(siteDir: string, id: string): Promise<PostDetail> {
-  const raw = await fs.readFile(idToPath(siteDir, id), 'utf8')
+  const filePath = idToPath(siteDir, id)
+  const raw = await fs.readFile(filePath, 'utf8')
+  const stat = await fs.stat(filePath)
   const parsed = matter(raw)
   const kind: PostKind = id.startsWith(POSTS_DIR) ? 'post' : 'draft'
   const data = parsed.data as Record<string, unknown>
   return {
-    ...metaFrom(id, kind, raw, parsed.content, data),
+    ...metaFrom(id, kind, raw, parsed.content, data, stat.mtimeMs),
     raw,
     content: parsed.content
   }

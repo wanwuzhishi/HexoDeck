@@ -52,6 +52,13 @@ app.whenReady().then(() => {
   })
 })
 
+// 沙箱/兼容性问题的诊断出口：渲染进程或 GPU 崩溃时打印类型、原因与退出码
+app.on('child-process-gone', (_event, details) => {
+  console.error(
+    `[HexoDeck] 子进程异常: type=${details.type} reason=${details.reason} exitCode=${details.exitCode}`
+  )
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })

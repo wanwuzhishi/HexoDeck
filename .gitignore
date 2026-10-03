@@ -8,3 +8,5 @@ resources/embed/node_modules/
 .DS_Store
 .idea/
 .vscode/
+fix-*.log
+*.dmp
