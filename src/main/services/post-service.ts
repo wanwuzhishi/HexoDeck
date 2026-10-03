@@ -4,6 +4,7 @@ import { basename, join } from 'path'
 import matter from 'gray-matter'
 import type { PostDetail, PostKind, PostMeta, PostPatch, SearchHit } from '@shared/ipc'
 import { formatDate } from './site-service'
+import { countWords } from './stats-service'
 
 const POSTS_DIR = '_posts'
 const DRAFTS_DIR = '_drafts'
@@ -65,7 +66,7 @@ function metaFrom(
     date,
     tags: toTags(data.tags),
     categories: toCategories(data.categories),
-    wordCount: content.replace(/\s/g, '').length
+    wordCount: countWords(content)
   }
 }
 

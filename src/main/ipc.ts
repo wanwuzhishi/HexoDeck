@@ -27,6 +27,7 @@ import {
 } from './services/post-service'
 import { saveImage } from './services/asset-service'
 import { installThemeFromArchive, isArchive } from './services/theme-archive-service'
+import { collectStats } from './services/stats-service'
 import {
   listPlugins,
   listThemes,
@@ -263,6 +264,14 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle('asset:saveImage', async (_e, fileName: string, base64: string) => {
     try {
       return okResult(await saveImage(requireSite(), fileName, base64))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('stats:get', async () => {
+    try {
+      return okResult(await collectStats(requireSite()))
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }

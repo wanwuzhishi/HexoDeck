@@ -118,6 +118,49 @@ export interface PluginInfo {
   configKey: string | null
 }
 
+/** 统计项（标签/分类排行） */
+export interface StatCountItem {
+  name: string
+  count: number
+}
+
+export interface StatMonthPoint {
+  month: string
+  count: number
+  words: number
+}
+
+export interface StatYearPoint {
+  year: string
+  count: number
+  words: number
+}
+
+/** 站点统计（统计页数据源） */
+export interface SiteStats {
+  postCount: number
+  draftCount: number
+  totalWords: number
+  totalChars: number
+  avgWords: number
+  longest: { title: string; words: number } | null
+  shortest: { title: string; words: number } | null
+  tagCount: number
+  categoryCount: number
+  topTags: StatCountItem[]
+  topCategories: StatCountItem[]
+  firstPostDate: string | null
+  lastPostDate: string | null
+  activeDays: number
+  busiestDay: { date: string; count: number } | null
+  byYear: StatYearPoint[]
+  byMonth: StatMonthPoint[]
+  thisWeek: number
+  thisMonth: number
+  uncategorized: number
+  untagged: number
+}
+
 /** 应用级设置（与站点配置无关） */
 export interface AppSettings {
   /** 关闭窗口时最小化到托盘而非退出 */
@@ -177,6 +220,8 @@ export interface Api {
   publishDraft(id: string): Promise<Result<PostMeta>>
   /** 全文搜索（标题/标签/分类 + 正文），返回带摘录的命中项 */
   searchPosts(keyword: string): Promise<Result<SearchHit[]>>
+  /** 站点统计（统计页用） */
+  getStats(): Promise<Result<SiteStats>>
   /** 保存图片到 source/images，返回可直接插入 Markdown 的 URL */
   saveImage(fileName: string, base64: string): Promise<Result<string>>
 

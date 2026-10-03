@@ -22,6 +22,15 @@ async function switchTo(path: string): Promise<void> {
   }
 }
 
+async function removeSite(r: { path: string; name: string }): Promise<void> {
+  await siteStore.removeRecent(r.path)
+  message.success(`已从列表移除 ${r.name}（磁盘文件未删除）`)
+}
+
+function refreshRecents(): void {
+  void siteStore.loadRecents()
+}
+
 async function pickParentDir(): Promise<void> {
   const dir = await window.api.pickDirectory()
   if (dir) createForm.value.parentDir = dir
@@ -81,7 +90,13 @@ async function closeSite(): Promise<void> {
       </section>
 
       <section class="glass panel" style="margin-top: 12px">
-        <div class="panel-title">站点管理（最近打开）</div>
+        <div class="panel-head-row">
+          <div class="panel-title">站点管理</div>
+          <n-space :size="6">
+            <n-button size="tiny" type="primary" @click="siteStore.openViaDialog()">添加站点</n-button>
+            <n-button size="tiny" quaternary @click="refreshRecents">刷新</n-button>
+          </n-space>
+        </div>
         <div v-if="siteStore.recents.length" class="recents">
           <div v-for="r in siteStore.recents" :key="r.path" class="recent-item">
             <div class="r-main">
@@ -103,19 +118,19 @@ async function closeSite(): Promise<void> {
               >
                 切换
               </n-button>
-              <n-popconfirm
+              <n-button
                 v-if="r.path !== siteStore.site.path"
-                @positive-click="siteStore.removeRecent(r.path)"
+                size="tiny"
+                quaternary
+                :title="r.path"
+                @click="removeSite(r)"
               >
-                <template #trigger>
-                  <n-button size="tiny" quaternary type="error">移除</n-button>
-                </template>
-                从最近列表中移除该站点（不会删除磁盘文件），确定吗？
-              </n-popconfirm>
+                移除
+              </n-button>
             </n-space>
           </div>
         </div>
-        <div v-else class="muted small">暂无其他站点记录</div>
+        <div v-else class="muted small">暂无其他站点，点击「添加站点」选择 Hexo 站点目录</div>
       </section>
     </template>
 

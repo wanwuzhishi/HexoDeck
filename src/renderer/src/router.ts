@@ -6,6 +6,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'site', component: () => import('./views/SiteView.vue') },
     { path: '/posts', name: 'posts', component: () => import('./views/PostsView.vue'), meta: { needsSite: true } },
+    { path: '/stats', name: 'stats', component: () => import('./views/StatsView.vue'), meta: { needsSite: true } },
     { path: '/editor', name: 'editor', component: () => import('./views/EditorView.vue'), meta: { needsSite: true } },
     { path: '/publish', name: 'publish', component: () => import('./views/PublishView.vue'), meta: { needsSite: true } },
     { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue'), meta: { needsSite: true } }

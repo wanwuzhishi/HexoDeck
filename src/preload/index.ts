@@ -32,6 +32,7 @@ const api: Api = {
   deletePost: (id: string) => ipcRenderer.invoke('post:delete', id),
   publishDraft: (id: string) => ipcRenderer.invoke('post:publishDraft', id),
   searchPosts: (keyword: string) => ipcRenderer.invoke('post:search', keyword),
+  getStats: () => ipcRenderer.invoke('stats:get'),
   saveImage: (fileName: string, base64: string) => ipcRenderer.invoke('asset:saveImage', fileName, base64),
 
   runBuild: (command: BuildCommand) => ipcRenderer.invoke('build:run', command),

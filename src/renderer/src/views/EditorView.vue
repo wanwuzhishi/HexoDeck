@@ -16,6 +16,7 @@ import { usePostsStore } from '../stores/posts'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
+import { countWords } from '../composables/wordcount'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import type { PostDetail } from '@shared/ipc'
 
@@ -47,7 +48,7 @@ const dirty = computed(
     ]) !== snapshot.value
 )
 
-const liveWordCount = computed(() => form.value.content.replace(/\s/g, '').length)
+const liveWordCount = computed(() => countWords(form.value.content))
 
 // 真实预览运行中，把站内绝对路径图片映射到预览服务器
 const previewHtml = computed(() => {

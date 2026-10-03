@@ -54,6 +54,10 @@ export const useSiteStore = defineStore('site', {
     async removeRecent(path: string): Promise<void> {
       await window.api.removeRecentSite(path)
       this.recents = await window.api.listRecentSites()
+    },
+    /** 重新拉取最近站点列表（站点管理面板的「刷新」） */
+    async loadRecents(): Promise<void> {
+      this.recents = await window.api.listRecentSites()
     }
   }
 })
