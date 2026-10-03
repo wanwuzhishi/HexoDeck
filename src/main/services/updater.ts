@@ -7,9 +7,11 @@ import { logLine } from './logger'
 let emit: (s: UpdateStatus) => void = () => undefined
 let autoCheck = true
 let wired = false
+let lastProgressLogged = -1
 
-function status(s: UpdateStatus): void {
+function status(s: UpdateStatus, log = true): void {
   emit(s)
+  if (!log) return
   const extra = [
     s.version ? `v${s.version}` : '',
     s.percent != null ? `${Math.round(s.percent)}%` : '',
@@ -44,16 +46,23 @@ export function initUpdater(): void {
     debug: () => undefined
   }
 
-  autoUpdater.on('checking-for-update', () => status({ state: 'checking' }))
+  autoUpdater.on('checking-for-update', () => {
+    lastProgressLogged = -1
+    status({ state: 'checking' })
+  })
   autoUpdater.on('update-available', (info: UpdateInfo) =>
     status({ state: 'available', version: info.version })
   )
   autoUpdater.on('update-not-available', (info: UpdateInfo) =>
     status({ state: 'not-available', version: info.version })
   )
-  autoUpdater.on('download-progress', (p: ProgressInfo) =>
-    status({ state: 'downloading', percent: p.percent })
-  )
+  autoUpdater.on('download-progress', (p: ProgressInfo) => {
+    // 状态每次推送（界面进度条），日志每跨 10% 记一条避免刷屏
+    const rounded = Math.round(p.percent)
+    const shouldLog = rounded >= lastProgressLogged + 10 || rounded === 100
+    if (shouldLog) lastProgressLogged = rounded
+    status({ state: 'downloading', percent: p.percent }, shouldLog)
+  })
   autoUpdater.on('update-downloaded', (info: UpdateInfo) =>
     status({ state: 'downloaded', version: info.version })
   )
