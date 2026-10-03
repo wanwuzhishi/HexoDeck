@@ -17,6 +17,7 @@ import {
   NTag
 } from 'naive-ui'
 import { SearchOutline } from '@vicons/ionicons5'
+import { useRoute } from 'vue-router'
 import { useSiteStore } from '../stores/site'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
@@ -29,6 +30,22 @@ const ws = useWorkspaceStore()
 const ui = useUiStore()
 
 const activeTab = ref('base')
+/** 允许通过路由 query 指定初始标签（如 /settings?tab=theme），供侧栏快捷入口直达 */
+const route = useRoute()
+const VALID_TABS = ['base', 'deploy', 'theme', 'plugin', 'advanced', 'app'] as const
+function tabFromQuery(): string | null {
+  const t = String(route.query.tab ?? '')
+  return (VALID_TABS as readonly string[]).includes(t) ? t : null
+}
+activeTab.value = tabFromQuery() ?? 'base'
+// 已在设置页时再次点击快捷入口（仅 query 变化）也要切换标签
+watch(
+  () => route.query.tab,
+  () => {
+    const t = tabFromQuery()
+    if (t) activeTab.value = t
+  }
+)
 const loading = ref(false)
 
 // ---------- 基础配置（reactive：模板中无需判空） ----------
