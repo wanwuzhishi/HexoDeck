@@ -63,6 +63,12 @@ const themeContent = ref('')
 const savingTheme = ref(false)
 const installingTheme = ref('')
 
+// ---------- 高级（_config.yml 原文直编） ----------
+const rawFile = ref<{ path: string; content: string } | null>(null)
+const rawContent = ref('')
+const savingRaw = ref(false)
+const rawLoaded = ref(false)
+
 const MARKET = [
   { name: 'Butterfly', pkg: 'hexo-theme-butterfly', desc: '最流行的中文博客主题，功能丰富、文档完善' },
   { name: 'NexT', pkg: 'hexo-theme-next', desc: '经典老牌主题，稳定可靠' },
@@ -198,6 +204,43 @@ async function saveTheme(): Promise<void> {
   }
 }
 
+async function loadRawConfig(): Promise<void> {
+  const r = await window.api.readRawConfig()
+  if (r.ok && r.data) {
+    rawFile.value = r.data
+    rawContent.value = r.data.content
+    rawLoaded.value = true
+  } else {
+    message.error(r.error ?? '读取配置文件失败')
+  }
+}
+
+async function saveRaw(): Promise<void> {
+  savingRaw.value = true
+  try {
+    const r = await window.api.saveRawConfig(rawContent.value)
+    if (r.ok) {
+      message.success('_config.yml 已保存（修改前已自动备份）')
+      if (rawFile.value) rawFile.value = { ...rawFile.value, content: rawContent.value }
+      await restartPreviewIfRunning()
+    } else {
+      message.error(r.error ?? '保存失败（请检查 YAML 语法）')
+    }
+  } finally {
+    savingRaw.value = false
+  }
+}
+
+/** 插件设置：点击插件名，在配置文件尾部插入该插件的配置键模板 */
+function insertPluginKey(name: string): void {
+  if (new RegExp(`^${name}:`, 'm').test(rawContent.value)) {
+    message.info(`${name} 的配置键已存在，直接在编辑器中查找修改即可`)
+    return
+  }
+  rawContent.value = rawContent.value.replace(/\n*$/, '\n') + `${name}:\n  # 在此填写 ${name} 的配置\n`
+  message.success(`已插入 ${name} 配置键模板，填写后记得保存`)
+}
+
 async function installThemePkg(pkg: string): Promise<void> {
   installingTheme.value = pkg
   try {
@@ -269,6 +312,7 @@ watch(
 )
 watch(activeTab, (tab) => {
   if (tab === 'theme' && !themeFile.value) loadThemeConfig()
+  if (tab === 'advanced' && !rawLoaded.value) loadRawConfig()
 })
 </script>
 
@@ -437,6 +481,47 @@ watch(activeTab, (tab) => {
           </div>
         </section>
       </n-tab-pane>
+      <n-tab-pane name="advanced" tab="高级">
+        <section class="glass panel">
+          <div class="panel-head-row">
+            <div class="panel-title">Hexo 配置文件（_config.yml）</div>
+            <span v-if="rawFile" class="muted small path">{{ rawFile.path }}</span>
+          </div>
+          <div class="muted small" style="margin-bottom: 10px">
+            直接编辑配置文件原文，适合配置表单未覆盖的字段和各插件的个性化配置。保存前自动校验
+            YAML 并备份原文件为 _config.yml.hexodeck.bak；保存后预览会自动重启。
+          </div>
+          <n-input
+            v-model:value="rawContent"
+            type="textarea"
+            class="yaml-editor tall"
+            :input-props="{ spellcheck: false }"
+            placeholder="_config.yml 原文"
+          />
+          <n-space style="margin-top: 10px">
+            <n-button type="primary" :loading="savingRaw" @click="saveRaw">保存配置文件</n-button>
+            <n-button quaternary @click="loadRawConfig">放弃修改</n-button>
+            <span class="muted small">插件设置：Hexo 插件的配置一般以插件名为键写在此文件中，可从下方列表快速插入</span>
+          </n-space>
+        </section>
+
+        <section class="glass panel">
+          <div class="panel-title">插件配置键（点击插入模板）</div>
+          <div class="plugin-key-list">
+            <button
+              v-for="p in plugins"
+              :key="p.name"
+              class="plugin-key"
+              :title="`${p.name} 的配置键模板`"
+              @click="insertPluginKey(p.name)"
+            >
+              <span class="mono">{{ p.name }}:</span>
+              <span class="muted small">{{ p.description }}</span>
+            </button>
+            <div v-if="!plugins.length" class="muted small">暂无已安装插件</div>
+          </div>
+        </section>
+      </n-tab-pane>
     </n-tabs>
   </div>
 </template>
@@ -524,6 +609,37 @@ watch(activeTab, (tab) => {
   font-size: 13px;
   line-height: 1.6;
   min-height: 260px;
+}
+
+.yaml-editor.tall :deep(textarea) {
+  min-height: 420px;
+  font-size: 12.5px;
+}
+
+.plugin-key-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plugin-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-1);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.plugin-key:hover {
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow);
 }
 
 .plugin-list {

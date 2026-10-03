@@ -107,6 +107,22 @@ export async function readSiteConfig(siteDir: string): Promise<SiteConfigForm> {
   return toForm(data)
 }
 
+/** 高级：读取 _config.yml 原文 */
+export async function readRawConfig(siteDir: string): Promise<{ path: string; content: string }> {
+  return { path: configPath(siteDir), content: await readText(siteDir) }
+}
+
+/** 高级：保存 _config.yml 原文（YAML 校验 + 备份） */
+export async function saveRawConfig(siteDir: string, content: string): Promise<void> {
+  try {
+    loadYaml(content, { json: true })
+  } catch (e) {
+    throw new Error(`YAML 语法错误：${(e as Error).message.split('\n')[0]}`)
+  }
+  await backupOnce(siteDir)
+  await fs.writeFile(configPath(siteDir), content, 'utf8')
+}
+
 export interface BasePatch {
   title?: string
   subtitle?: string

@@ -20,10 +20,12 @@ import { saveImage } from './services/asset-service'
 import {
   listPlugins,
   listThemes,
+  readRawConfig,
   readSiteConfig,
   readThemeConfig,
   saveBaseConfig,
   saveDeployConfig,
+  saveRawConfig,
   saveThemeConfig,
   switchTheme
 } from './services/site-config-service'
@@ -266,6 +268,24 @@ export function registerIpc(ctx: IpcContext): void {
     try {
       await saveDeployConfig(requireSite(), deploy)
       onLog('✓ 部署配置已保存')
+      return okResult()
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('config:readRaw', async () => {
+    try {
+      return okResult(await readRawConfig(requireSite()))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('config:saveRaw', async (_e, content: string) => {
+    try {
+      await saveRawConfig(requireSite(), content)
+      onLog('✓ _config.yml 已保存（原文件备份于 _config.yml.hexodeck.bak）')
       return okResult()
     } catch (e) {
       return { ok: false, error: (e as Error).message }

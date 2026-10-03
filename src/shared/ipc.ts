@@ -143,6 +143,9 @@ export interface Api {
   readSiteConfig(): Promise<Result<SiteConfigForm>>
   saveBaseConfig(patch: SiteConfigPatch): Promise<Result>
   saveDeployConfig(deploy: DeployConfig): Promise<Result>
+  /** 高级：直接读写 _config.yml 原文（保存前校验 + 备份） */
+  readRawConfig(): Promise<Result<{ path: string; content: string }>>
+  saveRawConfig(content: string): Promise<Result>
   listThemes(): Promise<Result<ThemeInfo[]>>
   switchTheme(name: string): Promise<Result>
   readThemeConfig(): Promise<Result<ThemeConfigFile>>
