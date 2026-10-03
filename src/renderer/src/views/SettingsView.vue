@@ -16,11 +16,14 @@ import {
 } from 'naive-ui'
 import { useSiteStore } from '../stores/site'
 import { useWorkspaceStore } from '../stores/workspace'
+import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
+import CodeEditor from '../components/CodeEditor.vue'
 import type { PluginInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
 
 const site = useSiteStore()
 const ws = useWorkspaceStore()
+const ui = useUiStore()
 
 const activeTab = ref('base')
 const loading = ref(false)
@@ -68,7 +71,7 @@ const rawFile = ref<{ path: string; content: string } | null>(null)
 const rawContent = ref('')
 const savingRaw = ref(false)
 const rawLoaded = ref(false)
-const rawInputRef = ref<InstanceType<typeof NInput> | null>(null)
+const rawEditorRef = ref<InstanceType<typeof CodeEditor> | null>(null)
 const keySearch = ref('')
 
 /** 插件配置键搜索：按包名 / 配置键 / 说明过滤 */
@@ -273,15 +276,9 @@ function insertPluginKey(key: string): void {
 /** 滚动并选中编辑器中的配置键所在行 */
 function revealKey(key: string): void {
   void nextTick(() => {
-    const ta = (rawInputRef.value?.$el as HTMLElement | undefined)?.querySelector('textarea')
-    if (!ta) return
     const lines = rawContent.value.split('\n')
     const idx = lines.findIndex((l) => new RegExp(`^${key}:`).test(l))
-    if (idx < 0) return
-    const offset = lines.slice(0, idx).reduce((s, l) => s + l.length + 1, 0)
-    ta.focus()
-    ta.setSelectionRange(offset, offset + lines[idx].length)
-    ta.scrollTop = Math.max(0, (idx - 6) * 21)
+    if (idx >= 0) rawEditorRef.value?.revealLine(idx)
   })
 }
 
@@ -465,13 +462,9 @@ watch(activeTab, (tab) => {
             <div class="panel-title">当前主题配置（YAML）</div>
             <span v-if="themeFile" class="muted small path">{{ themeFile.path }}{{ themeFile.created ? '（新建的覆盖文件）' : '' }}</span>
           </div>
-          <n-input
-            v-model:value="themeContent"
-            type="textarea"
-            class="yaml-editor"
-            :input-props="{ spellcheck: false }"
-            placeholder="主题配置覆盖（与主题默认配置合并）"
-          />
+          <div class="code-editor-wrap theme-editor">
+            <CodeEditor ref="themeEditorRef" v-model="themeContent" :dark="ui.isDark" />
+          </div>
           <n-space style="margin-top: 10px">
             <n-button type="primary" :loading="savingTheme" @click="saveTheme">保存主题配置</n-button>
             <n-button quaternary @click="loadThemeConfig">放弃修改</n-button>
@@ -551,14 +544,9 @@ watch(activeTab, (tab) => {
             直接编辑配置文件原文，适合配置表单未覆盖的字段和各插件的个性化配置。保存前自动校验
             YAML 并备份原文件为 _config.yml.hexodeck.bak；保存后预览会自动重启。
           </div>
-          <n-input
-            ref="rawInputRef"
-            v-model:value="rawContent"
-            type="textarea"
-            class="yaml-editor tall"
-            :input-props="{ spellcheck: false }"
-            placeholder="_config.yml 原文"
-          />
+          <div class="code-editor-wrap raw-editor">
+            <CodeEditor ref="rawEditorRef" v-model="rawContent" :dark="ui.isDark" />
+          </div>
           <n-space style="margin-top: 10px">
             <n-button type="primary" :loading="savingRaw" @click="saveRaw">保存配置文件</n-button>
             <n-button quaternary @click="loadRawConfig">放弃修改</n-button>
@@ -679,16 +667,35 @@ watch(activeTab, (tab) => {
   font-size: 11px;
 }
 
-.yaml-editor :deep(textarea) {
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.6;
-  min-height: 260px;
+.code-editor-wrap {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  box-shadow: var(--glass-glow);
+  overflow: hidden;
 }
 
-.yaml-editor.tall :deep(textarea) {
-  min-height: 420px;
-  font-size: 12.5px;
+.raw-editor {
+  height: 440px;
+}
+
+.theme-editor {
+  height: 300px;
+}
+
+.warn-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--text-1);
+  font-size: 13px;
 }
 
 .plugin-key-list {
