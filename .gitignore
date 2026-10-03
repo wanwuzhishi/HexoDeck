@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+.tmp/
 resources/embed/node_modules/
 *.log
 *.local
