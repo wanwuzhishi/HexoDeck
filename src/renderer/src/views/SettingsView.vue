@@ -69,6 +69,19 @@ const rawContent = ref('')
 const savingRaw = ref(false)
 const rawLoaded = ref(false)
 const rawInputRef = ref<InstanceType<typeof NInput> | null>(null)
+const keySearch = ref('')
+
+/** 插件配置键搜索：按包名 / 配置键 / 说明过滤 */
+const filteredPlugins = computed(() => {
+  const kw = keySearch.value.trim().toLowerCase()
+  if (!kw) return plugins.value
+  return plugins.value.filter(
+    (p) =>
+      p.name.toLowerCase().includes(kw) ||
+      (p.configKey ?? '').toLowerCase().includes(kw) ||
+      p.description.toLowerCase().includes(kw)
+  )
+})
 
 const MARKET = [
   { name: 'Butterfly', pkg: 'hexo-theme-butterfly', desc: '最流行的中文博客主题，功能丰富、文档完善' },
@@ -554,10 +567,22 @@ watch(activeTab, (tab) => {
         </section>
 
         <section class="glass panel">
-          <div class="panel-title">插件配置键（点击打开或插入）</div>
+          <div class="panel-head-row">
+            <div class="panel-title">插件配置键（点击打开或插入）</div>
+            <n-space align="center">
+              <span v-if="keySearch.trim()" class="muted small">匹配 {{ filteredPlugins.length }} / {{ plugins.length }}</span>
+              <n-input
+                v-model:value="keySearch"
+                placeholder="搜索插件名 / 配置键 / 说明"
+                clearable
+                size="small"
+                style="width: 240px"
+              />
+            </n-space>
+          </div>
           <div class="plugin-key-list">
             <button
-              v-for="p in plugins"
+              v-for="p in filteredPlugins"
               :key="p.name"
               class="plugin-key"
               :title="p.configKey ? `打开 ${p.configKey}: 配置键` : `${p.name} 无独立配置键`"
@@ -566,7 +591,9 @@ watch(activeTab, (tab) => {
               <span class="mono">{{ p.configKey ? `${p.configKey}:` : p.name }}</span>
               <span class="muted small">{{ p.description }}</span>
             </button>
-            <div v-if="!plugins.length" class="muted small">暂无已安装插件</div>
+            <div v-if="!filteredPlugins.length" class="muted small">
+              {{ keySearch.trim() ? '没有匹配的插件，换个关键词试试' : '暂无已安装插件' }}
+            </div>
           </div>
         </section>
       </n-tab-pane>
