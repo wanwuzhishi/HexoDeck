@@ -1,6 +1,6 @@
 {
   "name": "hexodeck",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Hexo 图形化管理工具 —— 写作、预览、发布全流程",
   "main": "./out/main/index.js",
   "author": "wanwuzhishi",
