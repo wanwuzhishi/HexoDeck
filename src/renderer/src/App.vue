@@ -3,7 +3,7 @@ import { computed, h, onMounted, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { darkTheme, dateZhCN, NIcon, zhCN } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
-import { DocumentTextOutline, HomeOutline, RocketOutline } from '@vicons/ionicons5'
+import { DocumentTextOutline, HomeOutline, RocketOutline, SettingsOutline } from '@vicons/ionicons5'
 import { darkOverrides, lightOverrides } from './theme'
 import { useSiteStore } from './stores/site'
 import { useWorkspaceStore } from './stores/workspace'
@@ -30,7 +30,8 @@ const renderIcon = (icon: unknown) => (): ReturnType<typeof h> =>
 const menuOptions: MenuOption[] = [
   { label: '站点', key: '/', icon: renderIcon(HomeOutline) },
   { label: '文章', key: '/posts', icon: renderIcon(DocumentTextOutline) },
-  { label: '发布', key: '/publish', icon: renderIcon(RocketOutline) }
+  { label: '发布', key: '/publish', icon: renderIcon(RocketOutline) },
+  { label: '设置', key: '/settings', icon: renderIcon(SettingsOutline) }
 ]
 
 const activeKey = computed(() => (route.path.startsWith('/editor') ? '/posts' : route.path))

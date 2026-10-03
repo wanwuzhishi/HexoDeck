@@ -18,8 +18,20 @@ import {
 } from './services/post-service'
 import { saveImage } from './services/asset-service'
 import {
+  listPlugins,
+  listThemes,
+  readSiteConfig,
+  readThemeConfig,
+  saveBaseConfig,
+  saveDeployConfig,
+  saveThemeConfig,
+  switchTheme
+} from './services/site-config-service'
+import type { BasePatch } from './services/site-config-service'
+import {
   findFreePort,
   runHexoBuild,
+  runNpm,
   runNpmInstall,
   startHexoServer,
   type ChildBase,
@@ -228,5 +240,101 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('preview:stop', async () => {
     await stopPreview()
+  })
+
+  // ============ 站点配置 / 主题 / 插件（M3） ============
+
+  ipcMain.handle('config:read', async () => {
+    try {
+      return okResult(await readSiteConfig(requireSite()))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('config:saveBase', async (_e, patch: BasePatch) => {
+    try {
+      await saveBaseConfig(requireSite(), patch)
+      onLog('✓ 基础配置已保存（原文件已备份为 _config.yml.hexodeck.bak）')
+      return okResult()
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('config:saveDeploy', async (_e, deploy: { type: string; repo: string; branch: string }) => {
+    try {
+      await saveDeployConfig(requireSite(), deploy)
+      onLog('✓ 部署配置已保存')
+      return okResult()
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('theme:list', async () => {
+    try {
+      return okResult(await listThemes(requireSite()))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('theme:switch', async (_e, name: string) => {
+    try {
+      await switchTheme(requireSite(), name)
+      onLog(`✓ 主题已切换为 ${name}，重新生成或重启预览后生效`)
+      return okResult()
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('theme:readConfig', async () => {
+    try {
+      return okResult(await readThemeConfig(requireSite()))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('theme:saveConfig', async (_e, content: string) => {
+    try {
+      const r = await saveThemeConfig(requireSite(), content)
+      onLog(`✓ 主题配置已保存：${r.path}`)
+      return okResult(r)
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('plugin:list', async () => {
+    try {
+      return okResult(await listPlugins(requireSite()))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('plugin:install', async (_e, name: string) => {
+    try {
+      const site = requireSite()
+      if (!/^[\w./@-]+$/.test(name)) return { ok: false, error: '非法的包名' }
+      const ok = await runNpm(site, ['install', name, '--save', '--no-fund', '--no-audit'], onLog)
+      return ok ? okResult() : { ok: false, error: 'npm install 失败，详见运行日志' }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('plugin:uninstall', async (_e, name: string) => {
+    try {
+      const site = requireSite()
+      if (!/^[\w./@-]+$/.test(name)) return { ok: false, error: '非法的包名' }
+      const ok = await runNpm(site, ['uninstall', name, '--save', '--no-fund', '--no-audit'], onLog)
+      return ok ? okResult() : { ok: false, error: 'npm uninstall 失败，详见运行日志' }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
   })
 }

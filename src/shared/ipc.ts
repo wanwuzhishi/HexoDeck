@@ -61,6 +61,61 @@ export interface Result<T = undefined> {
   data?: T
 }
 
+/** 站点 _config.yml 表单化配置 */
+export interface DeployConfig {
+  type: string
+  repo: string
+  branch: string
+}
+
+export interface SiteConfigForm {
+  title: string
+  subtitle: string
+  description: string
+  author: string
+  language: string
+  timezone: string
+  url: string
+  root: string
+  permalink: string
+  perPage: number | null
+  postAssetFolder: boolean
+  theme: string
+  deploy: DeployConfig
+}
+
+export interface SiteConfigPatch {
+  title?: string
+  subtitle?: string
+  description?: string
+  author?: string
+  language?: string
+  timezone?: string
+  url?: string
+  root?: string
+  permalink?: string
+  perPage?: number | null
+  postAssetFolder?: boolean
+}
+
+export interface ThemeInfo {
+  name: string
+  active: boolean
+  source: 'themes-dir' | 'npm'
+}
+
+export interface ThemeConfigFile {
+  path: string
+  content: string
+  created: boolean
+}
+
+export interface PluginInfo {
+  name: string
+  version: string
+  description: string
+}
+
 /** preload 暴露给渲染进程的 API（window.api） */
 export interface Api {
   openSiteDialog(): Promise<SiteInfo | null>
@@ -84,6 +139,17 @@ export interface Api {
   runBuild(command: BuildCommand): Promise<BuildResult>
   startPreview(includeDrafts: boolean): Promise<Result<string>>
   stopPreview(): Promise<void>
+
+  readSiteConfig(): Promise<Result<SiteConfigForm>>
+  saveBaseConfig(patch: SiteConfigPatch): Promise<Result>
+  saveDeployConfig(deploy: DeployConfig): Promise<Result>
+  listThemes(): Promise<Result<ThemeInfo[]>>
+  switchTheme(name: string): Promise<Result>
+  readThemeConfig(): Promise<Result<ThemeConfigFile>>
+  saveThemeConfig(content: string): Promise<Result>
+  listPlugins(): Promise<Result<PluginInfo[]>>
+  installPlugin(name: string): Promise<Result>
+  uninstallPlugin(name: string): Promise<Result>
 
   onLog(cb: (line: string) => void): () => void
   onFsChanged(cb: () => void): () => void

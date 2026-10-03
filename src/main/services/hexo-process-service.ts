@@ -75,25 +75,30 @@ export function runHexoBuild(
   )
 }
 
-/** 在新建的站点目录执行 npm install（需要用户机器上有 Node/npm） */
-export function runNpmInstall(siteDir: string, onLog: (line: string) => void): Promise<boolean> {
+/** 在站点目录执行 npm 命令（安装依赖/插件等），日志实时回调 */
+export function runNpm(siteDir: string, args: string[], onLog: (line: string) => void): Promise<boolean> {
   return enqueue(
     () =>
       new Promise<boolean>((resolveInstall) => {
-        onLog('$ npm install')
-        const child = spawn('npm', ['install', '--no-fund', '--no-audit'], {
+        onLog(`$ npm ${args.join(' ')}`)
+        const child = spawn('npm', args, {
           cwd: siteDir,
           shell: true,
           env: process.env
         })
         pipeLogs(child, onLog)
         child.on('error', (e) => {
-          onLog(`npm 启动失败：${String(e)}。请手动在站点目录执行 npm install。`)
+          onLog(`npm 启动失败：${String(e)}。请确认本机已安装 Node.js/npm。`)
           resolveInstall(false)
         })
         child.on('exit', (code) => resolveInstall(code === 0))
       })
   )
+}
+
+/** 新建站点后安装全部依赖 */
+export function runNpmInstall(siteDir: string, onLog: (line: string) => void): Promise<boolean> {
+  return runNpm(siteDir, ['install', '--no-fund', '--no-audit'], onLog)
 }
 
 export async function isPortFree(port: number): Promise<boolean> {

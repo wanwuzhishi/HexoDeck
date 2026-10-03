@@ -80,6 +80,7 @@ watch(
         <n-button size="small" block secondary @click="quickPreview">启动本地预览</n-button>
         <n-button size="small" block secondary @click="router.push('/publish')">构建与部署</n-button>
         <n-button size="small" block secondary @click="router.push('/posts')">管理文章</n-button>
+        <n-button size="small" block secondary @click="router.push('/settings')">站点配置 / 主题</n-button>
       </div>
     </section>
 

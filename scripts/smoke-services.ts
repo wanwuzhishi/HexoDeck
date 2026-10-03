@@ -5,7 +5,7 @@
  */
 import { promises as fs } from 'fs'
 import { join, resolve } from 'path'
-import { openSite } from '../src/main/services/site-service'
+import { createSite, openSite } from '../src/main/services/site-service'
 import {
   createPost,
   deletePost,
@@ -15,6 +15,16 @@ import {
   searchPosts
 } from '../src/main/services/post-service'
 import { saveImage } from '../src/main/services/asset-service'
+import {
+  listPlugins,
+  listThemes,
+  readSiteConfig,
+  readThemeConfig,
+  saveBaseConfig,
+  saveDeployConfig,
+  saveThemeConfig,
+  switchTheme
+} from '../src/main/services/site-config-service'
 import {
   findFreePort,
   runHexoBuild,
@@ -84,6 +94,56 @@ async function main(): Promise<void> {
     hits.some((h) => h.id.includes('hello-world') && h.snippet?.includes('Welcome')),
     `${hits.length} 个命中`
   )
+
+  // 9. 站点配置 / 主题 / 插件服务（在临时站点验证，不触碰真实站点配置）
+  const tmpParent = resolve('.tmp/smoke-sites')
+  const tmpSite = await createSite('config-test', tmpParent)
+  const cfg1 = await readSiteConfig(tmpSite)
+  check('读取配置 title', cfg1.title === 'config-test', cfg1.title)
+  const cfgPath = join(tmpSite, '_config.yml')
+  const beforeText = await fs.readFile(cfgPath, 'utf8')
+  const commentsBefore = beforeText.split('\n').filter((l) => l.trim().startsWith('#')).length
+  await saveBaseConfig(tmpSite, { subtitle: '副标题"测试"', perPage: 15, postAssetFolder: true })
+  const cfg2 = await readSiteConfig(tmpSite)
+  check(
+    '基础配置写入回读',
+    cfg2.subtitle === '副标题"测试"' && cfg2.perPage === 15 && cfg2.postAssetFolder === true
+  )
+  const afterText = await fs.readFile(cfgPath, 'utf8')
+  const commentsAfter = afterText.split('\n').filter((l) => l.trim().startsWith('#')).length
+  check('配置注释与结构保留', commentsAfter >= commentsBefore, `${commentsBefore} → ${commentsAfter} 行注释`)
+
+  await saveDeployConfig(tmpSite, {
+    type: 'git',
+    repo: 'https://github.com/t/t.git',
+    branch: 'main'
+  })
+  const cfg3 = await readSiteConfig(tmpSite)
+  check(
+    '部署配置写入',
+    cfg3.deploy.type === 'git' && cfg3.deploy.repo === 'https://github.com/t/t.git' && cfg3.deploy.branch === 'main'
+  )
+  await saveDeployConfig(tmpSite, { type: 'git', repo: 'https://github.com/t/t2.git', branch: 'main' })
+  const afterDeploy = await fs.readFile(cfgPath, 'utf8')
+  check('部署块重复保存不重复追加', (afterDeploy.match(/repo:/g) ?? []).length === 1)
+  const cfg4 = await readSiteConfig(tmpSite)
+  check('部署块替换值', cfg4.deploy.repo === 'https://github.com/t/t2.git')
+
+  const th = await listThemes(tmpSite)
+  check('主题检测（npm 来源）', th.some((t) => t.name === 'landscape' && t.source === 'npm'))
+  await switchTheme(tmpSite, 'butterfly')
+  const cfg5 = await readSiteConfig(tmpSite)
+  check('主题切换写入', cfg5.theme === 'butterfly')
+
+  const tcfg = await readThemeConfig(tmpSite)
+  check('主题覆盖配置创建', tcfg.created && tcfg.path.includes('_config.butterfly.yml'))
+  await saveThemeConfig(tmpSite, 'theme_config:\n  index: 1\n')
+  const tcfg2 = await readThemeConfig(tmpSite)
+  check('主题配置保存回读', tcfg2.content.includes('index: 1'))
+
+  const pl = await listPlugins(tmpSite)
+  check('插件识别', pl.some((p) => p.name === 'hexo-renderer-marked'))
+  await fs.rm(tmpParent, { recursive: true, force: true })
 
   // 7. 生成静态页面（增量构建：无变更时输出 0 个文件，属正常）
   const publicIndex = join(siteDir, 'public', 'index.html')

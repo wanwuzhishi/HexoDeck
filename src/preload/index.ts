@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Api, BuildCommand, PostKind, PostPatch } from '../shared/ipc'
+import type { Api, BuildCommand, DeployConfig, PostKind, PostPatch, SiteConfigPatch } from '../shared/ipc'
 
 const api: Api = {
   openSiteDialog: () => ipcRenderer.invoke('site:openDialog'),
@@ -21,6 +21,17 @@ const api: Api = {
   runBuild: (command: BuildCommand) => ipcRenderer.invoke('build:run', command),
   startPreview: (includeDrafts: boolean) => ipcRenderer.invoke('preview:start', includeDrafts),
   stopPreview: () => ipcRenderer.invoke('preview:stop'),
+
+  readSiteConfig: () => ipcRenderer.invoke('config:read'),
+  saveBaseConfig: (patch: SiteConfigPatch) => ipcRenderer.invoke('config:saveBase', patch),
+  saveDeployConfig: (deploy: DeployConfig) => ipcRenderer.invoke('config:saveDeploy', deploy),
+  listThemes: () => ipcRenderer.invoke('theme:list'),
+  switchTheme: (name: string) => ipcRenderer.invoke('theme:switch', name),
+  readThemeConfig: () => ipcRenderer.invoke('theme:readConfig'),
+  saveThemeConfig: (content: string) => ipcRenderer.invoke('theme:saveConfig', content),
+  listPlugins: () => ipcRenderer.invoke('plugin:list'),
+  installPlugin: (name: string) => ipcRenderer.invoke('plugin:install', name),
+  uninstallPlugin: (name: string) => ipcRenderer.invoke('plugin:uninstall', name),
 
   onLog: (cb: (line: string) => void) => {
     const handler = (_e: unknown, line: string): void => cb(line)
