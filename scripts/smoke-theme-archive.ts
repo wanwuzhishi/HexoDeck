@@ -5,6 +5,7 @@
 import { promises as fs } from 'fs'
 import { join, resolve } from 'path'
 import * as tar from 'tar'
+import extractZip from 'extract-zip'
 import { createSite } from '../src/main/services/site-service'
 import { installThemeFromArchive, isArchive } from '../src/main/services/theme-archive-service'
 
@@ -23,12 +24,20 @@ async function makeThemeSource(root: string, themeName: string, wrap: boolean): 
   return base
 }
 
-async function zipDir(sourceDir: string, outFile: string): Promise<void> {
-  await tar.c({ gzip: false, file: outFile, cwd: sourceDir }, ['.'])
-}
-
 async function tgzDir(parentOfTheme: string, themeName: string, outFile: string): Promise<void> {
   await tar.c({ gzip: true, file: outFile, cwd: parentOfTheme }, [themeName])
+}
+
+/** 用 PowerShell 的 Compress-Archive 生成真正的 zip（tar 无法产出 zip） */
+async function realZip(sourceDir: string, outFile: string): Promise<void> {
+  const { execFile } = await import('child_process')
+  const { promisify } = await import('util')
+  const run = promisify(execFile)
+  await run('powershell', [
+    '-NoProfile',
+    '-Command',
+    `Compress-Archive -Path '${join(sourceDir, '*')}' -DestinationPath '${outFile}' -Force`
+  ])
 }
 
 async function main(): Promise<void> {
@@ -43,20 +52,31 @@ async function main(): Promise<void> {
   check('识别 tar 系列', isArchive('a.tar') && isArchive('a.tar.gz') && isArchive('a.tgz'))
   check('拒绝非压缩包', !isArchive('a.rar') && !isArchive('theme'))
 
-  // 2. 标准结构（压缩包内直接是主题根）
-  const src1 = join(work, 'src1')
-  await makeThemeSource(src1, 'ignored', false)
-  const zip1 = join(packs, 'hexo-theme-aurora.zip')
-  await zipDir(src1, zip1)
-  const r1 = await installThemeFromArchive(site, zip1)
-  check('标准结构安装成功', r1.name === 'aurora', `安装为 ${r1.name}`)
-  check(
-    '文件落到 themes/aurora',
-    await fs
-      .stat(join(site, 'themes', 'aurora', '_config.yml'))
-      .then(() => true)
-      .catch(() => false)
-  )
+  // 2. 四种格式逐一安装（zip 用真实 zip，其余用 tar 系列）
+  //    真实事故：tar 模块不认 zip（TAR_BAD_ARCHIVE），必须分流解析
+  const formats: Array<{ ext: string; name: string; make: (src: string, out: string) => Promise<void> }> = [
+    { ext: '.zip', name: 'via-zip', make: realZip },
+    { ext: '.tar', name: 'via-tar', make: (s, o) => tar.c({ gzip: false, file: o, cwd: s }, ['.']) },
+    { ext: '.tar.gz', name: 'via-targz', make: (s, o) => tar.c({ gzip: true, file: o, cwd: s }, ['.']) },
+    { ext: '.tgz', name: 'via-tgz', make: (s, o) => tar.c({ gzip: true, file: o, cwd: s }, ['.']) }
+  ]
+
+  for (const f of formats) {
+    const src = join(work, `src-${f.name}`)
+    await makeThemeSource(src, 'ignored', false)
+    const pack = join(packs, `hexo-theme-${f.name}${f.ext}`)
+    await f.make(src, pack)
+    try {
+      const r = await installThemeFromArchive(site, pack)
+      check(
+        `${f.ext} 格式安装成功`,
+        r.name === f.name &&
+          (await fs.stat(join(site, 'themes', f.name, '_config.yml')).then(() => true).catch(() => false))
+      )
+    } catch (e) {
+      check(`${f.ext} 格式安装成功`, false, (e as Error).message.slice(0, 50))
+    }
+  }
 
   // 3. 单层包裹（压缩包内是 主题名/主题名）
   const src2 = join(work, 'src2')
@@ -73,7 +93,7 @@ async function main(): Promise<void> {
   // 4. 重复安装同名主题应被拒绝且不破坏已有主题
   let dupErr = ''
   try {
-    await installThemeFromArchive(site, zip1)
+    await installThemeFromArchive(site, join(packs, 'hexo-theme-via-zip.zip'))
   } catch (e) {
     dupErr = (e as Error).message
   }
@@ -84,7 +104,7 @@ async function main(): Promise<void> {
   await fs.mkdir(junk, { recursive: true })
   await fs.writeFile(join(junk, 'readme.txt'), 'no theme here', 'utf8')
   const zip3 = join(packs, 'not-a-theme.zip')
-  await zipDir(junk, zip3)
+  await realZip(junk, zip3)
   let junkErr = ''
   try {
     await installThemeFromArchive(site, zip3)

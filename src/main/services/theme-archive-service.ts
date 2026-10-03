@@ -2,12 +2,27 @@ import { promises as fs } from 'fs'
 import { existsSync } from 'fs'
 import { basename, join, dirname } from 'path'
 import * as tar from 'tar'
+import extractZip from 'extract-zip'
 
-/** 主题压缩包支持的扩展名 */
+/** 主题压缩包支持的扩展名（zip 与 tar 系列分流处理） */
 const ARCHIVE_EXT = /\.(zip|tar|tar\.gz|tgz)$/i
+const ZIP_EXT = /\.zip$/i
 
 export function isArchive(filePath: string): boolean {
   return ARCHIVE_EXT.test(filePath)
+}
+
+/**
+ * 解压主题压缩包到目标目录。
+ * zip 与 tar 系列需要不同的解析器：node 的 tar 模块不认 zip（会抛 TAR_BAD_ARCHIVE），
+ * 因此按扩展名分流；两者都原生跨平台，不依赖系统安装的解压软件。
+ */
+async function extractArchive(archivePath: string, destDir: string): Promise<void> {
+  if (ZIP_EXT.test(archivePath)) {
+    await extractZip(archivePath, { dir: destDir })
+    return
+  }
+  await tar.x({ file: archivePath, cwd: destDir })
 }
 
 /** 从压缩包文件名推断主题目录名（去掉扩展名与常见前缀） */
@@ -74,8 +89,8 @@ export async function installThemeFromArchive(
   log(`解压主题包：${basename(archivePath)}`)
 
   try {
-    // tar 模块同时支持 zip 与 tar 系列；strip 为 0 以便随后定位真实主题根
-    await tar.x({ file: archivePath, cwd: staging })
+    log(`解压主题包：${basename(archivePath)}`)
+    await extractArchive(archivePath, staging)
 
     const themeRoot = await locateThemeRoot(staging)
     if (!(await isThemeDir(themeRoot))) {
