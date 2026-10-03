@@ -75,7 +75,9 @@ export function runHexoBuild(
   )
 }
 
-/** 在站点目录执行 npm 命令（安装依赖/插件等），日志实时回调 */
+/** 在站点目录执行 npm 命令（安装依赖/插件等），日志实时回调。
+ *  --yes 自动确认 npm 的交互提示（否则 piped stdin 下 npm 会永远等待导致转圈）；
+ *  5 分钟看门狗超时强制终止进程树，避免队列卡死。 */
 export function runNpm(siteDir: string, args: string[], onLog: (line: string) => void): Promise<boolean> {
   return enqueue(
     () =>
@@ -87,18 +89,34 @@ export function runNpm(siteDir: string, args: string[], onLog: (line: string) =>
           env: process.env
         })
         pipeLogs(child, onLog)
+        const watchdog = setTimeout(
+          () => {
+            onLog('✗ npm 执行超时（5 分钟），已强制终止。请检查网络后重试。')
+            try {
+              if (child.pid) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { shell: true })
+            } catch {
+              child.kill()
+            }
+            resolveInstall(false)
+          },
+          5 * 60_000
+        )
         child.on('error', (e) => {
+          clearTimeout(watchdog)
           onLog(`npm 启动失败：${String(e)}。请确认本机已安装 Node.js/npm。`)
           resolveInstall(false)
         })
-        child.on('exit', (code) => resolveInstall(code === 0))
+        child.on('exit', (code) => {
+          clearTimeout(watchdog)
+          resolveInstall(code === 0)
+        })
       })
   )
 }
 
 /** 新建站点后安装全部依赖 */
 export function runNpmInstall(siteDir: string, onLog: (line: string) => void): Promise<boolean> {
-  return runNpm(siteDir, ['install', '--no-fund', '--no-audit'], onLog)
+  return runNpm(siteDir, ['install', '--yes', '--no-fund', '--no-audit'], onLog)
 }
 
 export async function isPortFree(port: number): Promise<boolean> {

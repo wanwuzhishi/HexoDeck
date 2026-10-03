@@ -114,6 +114,8 @@ export interface PluginInfo {
   name: string
   version: string
   description: string
+  /** 该插件在 _config.yml 中的配置键（无独立配置键时为 null） */
+  configKey: string | null
 }
 
 /** preload 暴露给渲染进程的 API（window.api） */

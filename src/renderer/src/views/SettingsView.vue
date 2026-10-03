@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import {
   NButton,
   NForm,
@@ -68,6 +68,7 @@ const rawFile = ref<{ path: string; content: string } | null>(null)
 const rawContent = ref('')
 const savingRaw = ref(false)
 const rawLoaded = ref(false)
+const rawInputRef = ref<InstanceType<typeof NInput> | null>(null)
 
 const MARKET = [
   { name: 'Butterfly', pkg: 'hexo-theme-butterfly', desc: '最流行的中文博客主题，功能丰富、文档完善' },
@@ -83,6 +84,19 @@ const MARKET = [
 // ---------- 插件 ----------
 const newPlugin = ref('')
 const operatingPlugin = ref('')
+const installingNew = ref(false)
+
+async function installNew(): Promise<void> {
+  const name = newPlugin.value.trim()
+  if (!name) return
+  installingNew.value = true
+  try {
+    await installPlugin(name)
+    newPlugin.value = ''
+  } finally {
+    installingNew.value = false
+  }
+}
 
 /** 配置变更后重启预览使新配置生效 */
 async function restartPreviewIfRunning(): Promise<void> {
@@ -232,13 +246,45 @@ async function saveRaw(): Promise<void> {
 }
 
 /** 插件设置：点击插件名，在配置文件尾部插入该插件的配置键模板 */
-function insertPluginKey(name: string): void {
-  if (new RegExp(`^${name}:`, 'm').test(rawContent.value)) {
-    message.info(`${name} 的配置键已存在，直接在编辑器中查找修改即可`)
+function insertPluginKey(key: string): void {
+  if (new RegExp(`^${key}:`, 'm').test(rawContent.value)) {
+    message.info(`${key} 的配置键已存在，已在编辑器中为你定位`)
+    revealKey(key)
     return
   }
-  rawContent.value = rawContent.value.replace(/\n*$/, '\n') + `${name}:\n  # 在此填写 ${name} 的配置\n`
-  message.success(`已插入 ${name} 配置键模板，填写后记得保存`)
+  rawContent.value = rawContent.value.replace(/\n*$/, '\n') + `${key}:\n  # 在此填写 ${key} 的配置\n`
+  message.success(`已插入 ${key} 配置键模板，填写后记得保存`)
+  revealKey(key)
+}
+
+/** 滚动并选中编辑器中的配置键所在行 */
+function revealKey(key: string): void {
+  void nextTick(() => {
+    const ta = (rawInputRef.value?.$el as HTMLElement | undefined)?.querySelector('textarea')
+    if (!ta) return
+    const lines = rawContent.value.split('\n')
+    const idx = lines.findIndex((l) => new RegExp(`^${key}:`).test(l))
+    if (idx < 0) return
+    const offset = lines.slice(0, idx).reduce((s, l) => s + l.length + 1, 0)
+    ta.focus()
+    ta.setSelectionRange(offset, offset + lines[idx].length)
+    ta.scrollTop = Math.max(0, (idx - 6) * 21)
+  })
+}
+
+/** 插件页「设置」按钮：跳到高级页并定位/插入该插件的配置键 */
+async function openPluginSettings(p: PluginInfo): Promise<void> {
+  activeTab.value = 'advanced'
+  if (p.name.startsWith('hexo-theme-')) {
+    message.info('主题类插件的设置在「主题」标签页编辑')
+    return
+  }
+  await loadRawConfig()
+  if (!p.configKey) {
+    message.info(`${p.name} 没有独立配置键，可在编辑器中直接修改相关配置`)
+    return
+  }
+  insertPluginKey(p.configKey)
 }
 
 async function installThemePkg(pkg: string): Promise<void> {
@@ -450,13 +496,13 @@ watch(activeTab, (tab) => {
           <div class="panel-head-row">
             <div class="panel-title">已安装插件（{{ plugins.length }}）</div>
             <n-space>
-              <n-input v-model:value="newPlugin" placeholder="包名，如 hexo-generator-feed" style="width: 260px" />
-              <n-button
-                type="primary"
-                :loading="operatingPlugin === newPlugin.trim()"
-                :disabled="!newPlugin.trim()"
-                @click="installPlugin(newPlugin.trim()).then(() => (newPlugin = ''))"
-              >
+              <n-input
+                v-model:value="newPlugin"
+                placeholder="包名，如 hexo-generator-feed"
+                style="width: 260px"
+                @keyup.enter="installNew"
+              />
+              <n-button type="primary" :loading="installingNew" :disabled="installingNew || !newPlugin.trim()" @click="installNew">
                 安装
               </n-button>
             </n-space>
@@ -469,6 +515,7 @@ watch(activeTab, (tab) => {
               </div>
               <n-space align="center">
                 <n-tag size="small" round :bordered="false">{{ p.version }}</n-tag>
+                <n-button size="tiny" quaternary @click="openPluginSettings(p)">设置</n-button>
                 <n-popconfirm @positive-click="uninstallPlugin(p.name)">
                   <template #trigger>
                     <n-button size="tiny" quaternary type="error" :loading="operatingPlugin === p.name">卸载</n-button>
@@ -492,6 +539,7 @@ watch(activeTab, (tab) => {
             YAML 并备份原文件为 _config.yml.hexodeck.bak；保存后预览会自动重启。
           </div>
           <n-input
+            ref="rawInputRef"
             v-model:value="rawContent"
             type="textarea"
             class="yaml-editor tall"
@@ -501,21 +549,21 @@ watch(activeTab, (tab) => {
           <n-space style="margin-top: 10px">
             <n-button type="primary" :loading="savingRaw" @click="saveRaw">保存配置文件</n-button>
             <n-button quaternary @click="loadRawConfig">放弃修改</n-button>
-            <span class="muted small">插件设置：Hexo 插件的配置一般以插件名为键写在此文件中，可从下方列表快速插入</span>
+            <span class="muted small">插件设置：在「插件」页点「设置」可直达对应配置键，也可点击下方插件键插入</span>
           </n-space>
         </section>
 
         <section class="glass panel">
-          <div class="panel-title">插件配置键（点击插入模板）</div>
+          <div class="panel-title">插件配置键（点击打开或插入）</div>
           <div class="plugin-key-list">
             <button
               v-for="p in plugins"
               :key="p.name"
               class="plugin-key"
-              :title="`${p.name} 的配置键模板`"
-              @click="insertPluginKey(p.name)"
+              :title="p.configKey ? `打开 ${p.configKey}: 配置键` : `${p.name} 无独立配置键`"
+              @click="openPluginSettings(p)"
             >
-              <span class="mono">{{ p.name }}:</span>
+              <span class="mono">{{ p.configKey ? `${p.configKey}:` : p.name }}</span>
               <span class="muted small">{{ p.description }}</span>
             </button>
             <div v-if="!plugins.length" class="muted small">暂无已安装插件</div>

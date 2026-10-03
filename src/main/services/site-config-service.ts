@@ -245,29 +245,29 @@ export async function saveThemeConfig(siteDir: string, content: string): Promise
   return { path, content, created: !existsSync(path) }
 }
 
-const KNOWN_PLUGINS: Record<string, string> = {
-  'hexo-renderer-marked': 'Markdown 渲染器（默认）',
-  'hexo-renderer-ejs': 'EJS 模板渲染',
-  'hexo-renderer-stylus': 'Stylus 样式渲染',
-  'hexo-renderer-sass': 'Sass 样式渲染',
-  'hexo-renderer-kramed': 'Markdown 渲染器（kramed）',
-  'hexo-renderer-pandoc': 'Markdown 渲染器（pandoc）',
-  'hexo-server': '本地预览服务器',
-  'hexo-deployer-git': 'Git 一键部署',
-  'hexo-generator-index': '首页文章列表',
-  'hexo-generator-archive': '归档页',
-  'hexo-generator-category': '分类页',
-  'hexo-generator-tag': '标签页',
-  'hexo-generator-feed': 'RSS 订阅',
-  'hexo-generator-sitemap': '站点地图',
-  'hexo-generator-search': '本地搜索',
-  'hexo-generator-json-content': 'JSON 内容索引',
-  'hexo-abbrlink': '短永久链接',
-  'hexo-blog-encrypt': '文章加密',
-  'hexo-wordcount': '字数统计',
-  'hexo-permalink-pinyin': '拼音永久链接',
-  'hexo-related-popular-posts': '相关文章推荐',
-  'hexo-filter-github-emojis': 'GitHub 表情'
+const KNOWN_PLUGINS: Record<string, { desc: string; key?: string }> = {
+  'hexo-renderer-marked': { desc: 'Markdown 渲染器（默认）' },
+  'hexo-renderer-ejs': { desc: 'EJS 模板渲染' },
+  'hexo-renderer-stylus': { desc: 'Stylus 样式渲染' },
+  'hexo-renderer-sass': { desc: 'Sass 样式渲染' },
+  'hexo-renderer-kramed': { desc: 'Markdown 渲染器（kramed）' },
+  'hexo-renderer-pandoc': { desc: 'Markdown 渲染器（pandoc）' },
+  'hexo-server': { desc: '本地预览服务器' },
+  'hexo-deployer-git': { desc: 'Git 一键部署', key: 'deploy' },
+  'hexo-generator-index': { desc: '首页文章列表', key: 'index' },
+  'hexo-generator-archive': { desc: '归档页', key: 'archive' },
+  'hexo-generator-category': { desc: '分类页', key: 'category' },
+  'hexo-generator-tag': { desc: '标签页', key: 'tag' },
+  'hexo-generator-feed': { desc: 'RSS 订阅', key: 'feed' },
+  'hexo-generator-sitemap': { desc: '站点地图', key: 'sitemap' },
+  'hexo-generator-search': { desc: '本地搜索', key: 'search' },
+  'hexo-generator-json-content': { desc: 'JSON 内容索引', key: 'jsonContent' },
+  'hexo-abbrlink': { desc: '短永久链接', key: 'abbrlink' },
+  'hexo-blog-encrypt': { desc: '文章加密', key: 'encrypt' },
+  'hexo-wordcount': { desc: '字数统计（模板辅助，无配置键）' },
+  'hexo-permalink-pinyin': { desc: '拼音永久链接', key: 'permalink_pinyin' },
+  'hexo-related-popular-posts': { desc: '相关文章推荐', key: 'related_posts' },
+  'hexo-filter-github-emojis': { desc: 'GitHub 表情', key: 'githubEmojis' }
 }
 
 export async function listPlugins(siteDir: string): Promise<PluginInfo[]> {
@@ -282,7 +282,8 @@ export async function listPlugins(siteDir: string): Promise<PluginInfo[]> {
     .map(([name, version]) => ({
       name,
       version: version.replace(/^[\^~]/, ''),
-      description: KNOWN_PLUGINS[name] ?? 'Hexo 插件'
+      description: KNOWN_PLUGINS[name]?.desc ?? 'Hexo 插件',
+      configKey: KNOWN_PLUGINS[name]?.key ?? null
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }

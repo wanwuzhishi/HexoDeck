@@ -340,7 +340,7 @@ export function registerIpc(ctx: IpcContext): void {
     try {
       const site = requireSite()
       if (!/^[\w./@-]+$/.test(name)) return { ok: false, error: '非法的包名' }
-      const ok = await runNpm(site, ['install', name, '--save', '--no-fund', '--no-audit'], onLog)
+      const ok = await runNpm(site, ['install', name, '--save', '--yes', '--no-fund', '--no-audit'], onLog)
       return ok ? okResult() : { ok: false, error: 'npm install 失败，详见运行日志' }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
