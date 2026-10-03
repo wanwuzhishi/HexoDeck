@@ -18,7 +18,16 @@ export const lightOverrides: GlobalThemeOverrides = {
   Card: { borderRadius: '18px' },
   Modal: { borderRadius: '18px' },
   Popover: { borderRadius: '14px' },
-  DataTable: { borderRadius: '14px' },
+  DataTable: {
+    borderRadius: '14px',
+    color: 'transparent',
+    thColor: 'transparent',
+    thColorHover: 'transparent',
+    tdColor: 'transparent',
+    tdColorHover: 'rgba(56, 168, 220, 0.1)',
+    tdColorStriped: 'transparent',
+    borderColor: 'rgba(140, 195, 230, 0.35)'
+  },
   Dialog: { borderRadius: '18px' }
 }
 
@@ -40,6 +49,15 @@ export const darkOverrides: GlobalThemeOverrides = {
   Card: { borderRadius: '18px' },
   Modal: { borderRadius: '18px' },
   Popover: { borderRadius: '14px' },
-  DataTable: { borderRadius: '14px' },
+  DataTable: {
+    borderRadius: '14px',
+    color: 'transparent',
+    thColor: 'transparent',
+    thColorHover: 'transparent',
+    tdColor: 'transparent',
+    tdColorHover: 'rgba(34, 211, 238, 0.1)',
+    tdColorStriped: 'transparent',
+    borderColor: 'rgba(110, 200, 240, 0.18)'
+  },
   Dialog: { borderRadius: '18px' }
 }
