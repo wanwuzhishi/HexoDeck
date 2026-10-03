@@ -219,10 +219,32 @@ watch(
 </template>
 
 <style scoped>
+/* 页面纵向节奏：各区块统一 14px 间隔（全局 .page 只有 padding，不加会上下紧贴） */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .panel-head-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 双列区：列间距与行间距一致 */
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.two-col > .glass {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
 }
 
 .stat-grid {
@@ -320,12 +342,6 @@ watch(
   margin-top: 6px;
   font-size: 11px;
   color: var(--text-3);
-}
-
-.two-col {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 12px;
 }
 
 /* 排行榜 */
