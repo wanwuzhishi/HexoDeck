@@ -60,10 +60,46 @@ const baseTheme = EditorView.theme({
     fontSize: '13px'
   },
   '.cm-search label': {
+    position: 'relative',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '7px',
-    marginRight: '12px'
+    marginRight: '8px',
+    padding: '5px 12px',
+    borderRadius: '999px',
+    border: '1px solid var(--glass-border)',
+    background: 'var(--accent-soft)',
+    color: 'var(--text-2)',
+    cursor: 'pointer',
+    userSelect: 'none',
+    transition:
+      'border-color .15s ease, box-shadow .15s ease, color .15s ease, background .15s ease'
+  },
+  '.cm-search label:hover': {
+    borderColor: 'var(--accent)',
+    color: 'var(--text-1)'
+  },
+  // 选中态：主色描边 + 光晕 + 主色文字（与选中菜单项同语言）
+  '.cm-search label:has(input:checked)': {
+    borderColor: 'var(--accent)',
+    color: 'var(--accent)',
+    background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+    boxShadow: 'var(--accent-glow)'
+  },
+  '.cm-search label:has(input:focus-visible)': {
+    outline: '1px solid var(--accent)',
+    outlineOffset: '2px'
+  },
+  // 隐藏原生复选框，保留键盘可达性
+  '.cm-search input[type=checkbox]': {
+    position: 'absolute',
+    width: '0',
+    height: '0',
+    margin: '0',
+    padding: '0',
+    opacity: '0',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    pointerEvents: 'none'
   },
   '.cm-search input:not([type=checkbox])': {
     background: 'var(--accent-soft)',
@@ -79,11 +115,6 @@ const baseTheme = EditorView.theme({
   '.cm-search input:not([type=checkbox]):focus': {
     borderColor: 'var(--accent)',
     boxShadow: 'var(--accent-glow)'
-  },
-  '.cm-search input[type=checkbox]': {
-    accentColor: 'var(--accent)',
-    width: '14px',
-    height: '14px'
   },
   '.cm-search .cm-button-row': {
     display: 'flex',
