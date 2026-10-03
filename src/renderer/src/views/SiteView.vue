@@ -33,8 +33,9 @@ const statsLoading = ref(false)
 
 const site = computed(() => siteStore.site)
 
-/** 最近 5 篇文章（列表已按日期倒序） */
-const recentPosts = computed(() => posts.posts.slice(0, 5))
+/** 最近 3 篇（列表已按日期倒序），固定条数以保持卡片高度稳定 */
+const RECENT_LIMIT = 3
+const recentPosts = computed(() => posts.posts.slice(0, RECENT_LIMIT))
 
 /** 站点标识的首字母/首字，用于头像位 */
 const siteInitial = computed(() => {
@@ -338,6 +339,13 @@ watch(
 </template>
 
 <style scoped>
+/* 页面纵向节奏：所有区块统一 14px 间隔，避免卡片紧贴 */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .panel-head-row {
   display: flex;
   justify-content: space-between;
@@ -457,12 +465,20 @@ watch(
   margin-top: 10px;
 }
 
-/* 双列区 */
+/* 双列区：两卡等高（stretch），列间距 14px */
 .two-col {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 12px;
-  align-items: start;
+  gap: 14px;
+  align-items: stretch;
+}
+
+/* 双列内的卡片撑满整行高度，避免一高一矮 */
+.two-col > .glass {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin: 0;
 }
 
 /* 快捷操作 */
@@ -470,7 +486,9 @@ watch(
   /* 固定 2×2：四项正好铺满，避免 auto-fit 在窄列下折行导致高度不齐 */
   display: grid;
   grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
   gap: 10px;
+  flex: 1;
 }
 
 .quick-item {
@@ -505,11 +523,12 @@ watch(
   color: var(--text-1);
 }
 
-/* 最近文章 */
+/* 最近文章：固定 3 条、每条固定高度，卡片总高稳定且与左栏等高 */
 .recent-posts {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
+  flex: 1;
 }
 
 .post-row {
@@ -517,15 +536,19 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 12px;
+  height: 42px;
+  flex: none;
+  padding: 0 12px;
   border-radius: 10px;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .post-row:hover {
   background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--glass-border);
+  border-color: var(--glass-border);
+  box-shadow: var(--accent-glow);
 }
 
 .post-title {
