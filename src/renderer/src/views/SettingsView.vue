@@ -884,6 +884,13 @@ watch(activeTab, (tab) => {
 </template>
 
 <style scoped>
+/* 卡片间纵向间距：卡片实际父级是 n-tab-pane 的内容容器，需穿透 */
+.page :deep(.n-tabs .n-tab-pane) {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .form-narrow {
   max-width: 640px;
 }
