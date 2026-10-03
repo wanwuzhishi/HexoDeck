@@ -473,11 +473,13 @@ watch(
   align-items: stretch;
 }
 
-/* 双列内的卡片撑满整行高度，避免一高一矮 */
+/* 双列内的卡片：靠 stretch 拉平高度即可。
+   不能再设 height:100%——它与内部 flex:1 形成高度循环依赖，会让卡片溢出网格行、
+   盖到下一个区块上 */
 .two-col > .glass {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 0;
   margin: 0;
 }
 
