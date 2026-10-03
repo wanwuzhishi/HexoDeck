@@ -2,6 +2,9 @@
 
 Hexo 博客图形化管理工具 —— 写作、预览、发布、配置全流程，不碰命令行。
 
+[![Release](https://img.shields.io/github/v/release/wanwuzhishi/HexoDeck)](https://github.com/wanwuzhishi/HexoDeck/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
 Electron + Vue 3 + Naive UI · 双主题（深空霓虹 / 冰白清新）· 内嵌 Hexo 引擎
 
 ## 功能
@@ -38,6 +41,8 @@ Electron + Vue 3 + Naive UI · 双主题（深空霓虹 / 冰白清新）· 内�
 ## 快速开始
 
 ### 使用打包版（推荐）
+
+从 [Releases](https://github.com/wanwuzhishi/HexoDeck/releases) 下载：
 
 - **安装版**：运行 `HexoDeck-Setup-x.y.z.exe`，按向导安装（可选安装目录），日常使用首选
 - **绿色包**：解压 `HexoDeck-x.y.z-win.zip` 到任意目录（U 盘亦可），运行其中的 `HexoDeck.exe` 即可，零安装、秒启动
