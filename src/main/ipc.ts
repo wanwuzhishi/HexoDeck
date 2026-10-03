@@ -128,7 +128,7 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle('site:openDialog', async () => {
     const picked = await dialog.showOpenDialog({
       properties: ['openDirectory'],
-      title: '选择 Hexo 站点目录（包含 _config.yml）'
+      title: '选择已安装 Hexo 的博客文件夹（含 _config.yml）'
     })
     if (picked.canceled || picked.filePaths.length === 0) return null
     const result = await openByPath(picked.filePaths[0])

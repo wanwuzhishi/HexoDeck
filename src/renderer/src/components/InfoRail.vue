@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton } from 'naive-ui'
+import { NButton, NModal } from 'naive-ui'
 import { useSiteStore } from '../stores/site'
 import { usePostsStore } from '../stores/posts'
 import { useWorkspaceStore } from '../stores/workspace'
-import { message } from '../composables/message'
+import { confirmDialog, message } from '../composables/message'
 
 const site = useSiteStore()
 const posts = usePostsStore()
@@ -16,6 +16,44 @@ const postCount = computed(() => posts.posts.filter((p) => p.kind === 'post').le
 const draftCount = computed(() => posts.posts.filter((p) => p.kind === 'draft').length)
 const totalWords = computed(() => posts.posts.reduce((s, p) => s + p.wordCount, 0))
 const recent = computed(() => posts.posts.slice(0, 5))
+
+// ---------- 站点切换弹窗 ----------
+const showSwitch = ref(false)
+const switching = ref('')
+
+/** 「切换站点」只切换已添加的站点，不再走目录选择对话框 */
+async function openSwitch(): Promise<void> {
+  await site.loadRecents()
+  showSwitch.value = true
+}
+
+async function switchTo(path: string): Promise<void> {
+  // 点当前站点（或切换进行中）不重复打开
+  if (path === site.site?.path || switching.value) return
+  switching.value = path
+  try {
+    const r = await site.open(path)
+    if (r.ok) {
+      message.success('已切换站点')
+      showSwitch.value = false
+    } else {
+      message.error(r.error ?? '切换失败')
+    }
+  } finally {
+    switching.value = ''
+  }
+}
+
+async function removeSite(path: string, name: string): Promise<void> {
+  const ok = await confirmDialog({
+    title: '移除站点',
+    content: `确定从列表中移除「${name}」吗？仅移除记录，不会删除磁盘上的任何文件。`
+  })
+  if (!ok) return
+  await site.removeRecent(path)
+  message.success('已从列表移除')
+  if (!site.recents.length) showSwitch.value = false
+}
 
 async function quickPreview(): Promise<void> {
   if (ws.previewUrl) {
@@ -54,7 +92,7 @@ watch(
     <section class="glass panel">
       <div class="panel-head-row">
         <div class="panel-title">站点</div>
-        <n-button size="tiny" secondary @click="site.openViaDialog()">切换站点</n-button>
+        <n-button size="tiny" secondary @click="openSwitch">切换站点</n-button>
       </div>
       <div class="site-name">{{ site.site?.name ?? '未打开站点' }}</div>
       <div class="muted small path">{{ site.site?.path ?? '打开一个 Hexo 站点后显示详情' }}</div>
@@ -106,6 +144,40 @@ watch(
         <div v-if="!recent.length" class="muted small">暂无文章</div>
       </div>
     </section>
+
+    <!-- 切换站点：只列出已添加的站点，点击卡片即切换 -->
+    <n-modal v-model:show="showSwitch" preset="card" title="切换站点" style="width: 520px">
+      <div class="switch-list">
+        <div
+          v-for="r in site.recents"
+          :key="r.path"
+          class="switch-item"
+          :class="{ current: r.path === site.site?.path, busy: switching === r.path }"
+          :title="r.path === site.site?.path ? '当前站点' : `点击切换到 ${r.name}`"
+          @click="switchTo(r.path)"
+        >
+          <div class="s-main">
+            <div class="s-name-row">
+              <span class="s-name">{{ r.name }}</span>
+              <span v-if="r.path === site.site?.path" class="badge current-badge">当前</span>
+            </div>
+            <div class="s-path muted small">{{ r.path }}</div>
+          </div>
+          <n-button
+            v-if="r.path !== site.site?.path"
+            size="tiny"
+            quaternary
+            @click.stop="removeSite(r.path, r.name)"
+          >
+            移除
+          </n-button>
+          <span v-else class="muted small">使用中</span>
+        </div>
+        <div v-if="!site.recents.length" class="muted small">
+          还没有添加过站点，请先在「站点」页用「添加站点」选择一个 Hexo 博客文件夹。
+        </div>
+      </div>
+    </n-modal>
   </aside>
 </template>
 
@@ -253,5 +325,70 @@ watch(
 .badge.draft {
   color: var(--warn);
   border-color: var(--warn);
+}
+
+/* 切换站点弹窗 */
+.switch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.switch-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.switch-item:hover {
+  background: var(--accent-soft);
+  box-shadow: var(--accent-glow);
+}
+
+.switch-item.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  cursor: default;
+}
+
+.switch-item.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.s-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.s-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.s-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.s-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-badge {
+  color: var(--ok);
+  border-color: var(--ok);
 }
 </style>

@@ -28,6 +28,7 @@ const showCreate = ref(false)
 const creating = ref(false)
 const createForm = ref({ name: '', parentDir: '' })
 const switching = ref('')
+const showSwitch = ref(false)
 const stats = ref<SiteStats | null>(null)
 const statsLoading = ref(false)
 
@@ -66,6 +67,8 @@ async function loadStats(): Promise<void> {
 }
 
 async function switchTo(path: string): Promise<void> {
+  // 点当前站点（或切换进行中）不重复打开
+  if (path === siteStore.site?.path || switching.value) return
   switching.value = path
   try {
     const r = await siteStore.open(path)
@@ -74,6 +77,12 @@ async function switchTo(path: string): Promise<void> {
   } finally {
     switching.value = ''
   }
+}
+
+/** 切换弹窗内点击卡片：成功后关闭弹窗 */
+async function switchModalTo(path: string): Promise<void> {
+  await switchTo(path)
+  if (siteStore.site?.path === path) showSwitch.value = false
 }
 
 async function refreshRecents(): Promise<void> {
@@ -183,7 +192,8 @@ watch(
         </div>
         <div class="hero-actions">
           <n-button size="small" secondary @click="refreshAll">刷新</n-button>
-          <n-button size="small" secondary @click="siteStore.openViaDialog()">切换站点</n-button>
+          <n-button size="small" secondary @click="showSwitch = true">切换站点</n-button>
+          <n-button size="small" quaternary @click="siteStore.openViaDialog()">添加站点</n-button>
           <n-button size="small" quaternary @click="closeSite">关闭站点</n-button>
         </div>
       </section>
@@ -259,13 +269,20 @@ watch(
         <div class="panel-head-row">
           <div class="panel-title">站点管理</div>
           <n-space :size="6">
-            <n-button size="tiny" type="primary" @click="siteStore.openViaDialog()">添加站点</n-button>
+            <n-button size="tiny" secondary @click="siteStore.openViaDialog()">添加站点</n-button>
             <n-button size="tiny" quaternary @click="showCreate = true">新建站点</n-button>
             <n-button size="tiny" quaternary @click="refreshRecents">刷新</n-button>
           </n-space>
         </div>
         <div v-if="siteStore.recents.length" class="recents">
-          <div v-for="r in siteStore.recents" :key="r.path" class="recent-item">
+          <div
+            v-for="r in siteStore.recents"
+            :key="r.path"
+            class="recent-item clickable"
+            :class="{ current: r.path === site.path, busy: switching === r.path }"
+            :title="r.path === site.path ? '当前站点' : `点击切换到 ${r.name}`"
+            @click="switchTo(r.path)"
+          >
             <div class="r-main">
               <n-space align="center" :size="8">
                 <span class="r-name">{{ r.name }}</span>
@@ -275,15 +292,18 @@ watch(
               </n-space>
               <div class="r-path muted small">{{ r.path }}</div>
             </div>
-            <n-space v-if="r.path !== site.path" align="center" :size="6">
-              <n-button size="tiny" secondary :loading="switching === r.path" @click="switchTo(r.path)">
-                切换
-              </n-button>
-              <n-button size="tiny" quaternary @click="siteStore.removeRecent(r.path)">移除</n-button>
-            </n-space>
+            <n-button
+              v-if="r.path !== site.path"
+              size="tiny"
+              quaternary
+              @click.stop="siteStore.removeRecent(r.path)"
+            >
+              移除
+            </n-button>
+            <span v-else class="muted small">使用中</span>
           </div>
         </div>
-        <div v-else class="muted small">暂无其他站点，点击「添加站点」选择 Hexo 站点目录</div>
+        <div v-else class="muted small">暂无其他站点，点击「添加站点」选择一个 Hexo 博客文件夹（含 _config.yml）</div>
       </section>
     </template>
 
@@ -293,12 +313,13 @@ watch(
         <div class="welcome-logo">◆</div>
         <h2 class="welcome-title">开始使用 HexoDeck</h2>
         <p class="muted welcome-desc">
-          选择你的 Hexo 博客站点目录（包含 <code>_config.yml</code> 的文件夹），即可在图形界面中写作、预览与发布。
+          选择一个已安装 Hexo 的博客文件夹（包含 <code>_config.yml</code> 的目录），即可在图形界面中写作、预览与发布。
         </p>
         <n-space justify="center" :size="10">
           <n-button type="primary" :loading="siteStore.loading" @click="siteStore.openViaDialog()">
-            打开站点目录
+            添加站点
           </n-button>
+          <n-button v-if="siteStore.recents.length" @click="showSwitch = true">切换站点</n-button>
           <n-button @click="showCreate = true">新建站点</n-button>
         </n-space>
 
@@ -315,6 +336,39 @@ watch(
         <n-empty v-else description="暂无历史记录" size="small" style="margin-top: 18px" />
       </section>
     </template>
+
+    <n-modal v-model:show="showSwitch" preset="card" title="切换站点" style="width: 540px">
+      <div class="recents switch-recents">
+        <div
+          v-for="r in siteStore.recents"
+          :key="r.path"
+          class="recent-item clickable"
+          :class="{ current: r.path === site?.path, busy: switching === r.path }"
+          :title="r.path === site?.path ? '当前站点' : `点击切换到 ${r.name}`"
+          @click="switchModalTo(r.path)"
+        >
+          <div class="r-main">
+            <n-space align="center" :size="8">
+              <span class="r-name">{{ r.name }}</span>
+              <n-tag v-if="r.path === site?.path" size="small" type="success" round :bordered="false">当前</n-tag>
+            </n-space>
+            <div class="r-path muted small">{{ r.path }}</div>
+          </div>
+          <n-button
+            v-if="r.path !== site?.path"
+            size="tiny"
+            quaternary
+            @click.stop="siteStore.removeRecent(r.path)"
+          >
+            移除
+          </n-button>
+          <span v-else class="muted small">使用中</span>
+        </div>
+        <div v-if="!siteStore.recents.length" class="muted small">
+          还没有添加过站点，请先点击「添加站点」选择一个 Hexo 博客文件夹。
+        </div>
+      </div>
+    </n-modal>
 
     <n-modal v-model:show="showCreate" preset="card" title="新建 Hexo 站点" style="width: 520px">
       <n-form label-placement="left" :label-width="90">
@@ -593,6 +647,28 @@ watch(
 .recent-item:hover {
   background: var(--accent-soft);
   box-shadow: var(--accent-glow);
+}
+
+/* 整卡可点击切换站点 */
+.recent-item.clickable {
+  cursor: pointer;
+}
+
+.recent-item.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  cursor: default;
+}
+
+.recent-item.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* 切换弹窗内的站点项：当前站点高亮 */
+.switch-recents .recent-item.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .r-main {
