@@ -4,6 +4,7 @@ import {
   NButton,
   NForm,
   NFormItem,
+  NIcon,
   NInput,
   NInputNumber,
   NPopconfirm,
@@ -14,6 +15,7 @@ import {
   NTabs,
   NTag
 } from 'naive-ui'
+import { SearchOutline } from '@vicons/ionicons5'
 import { useSiteStore } from '../stores/site'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
@@ -259,6 +261,11 @@ async function saveRaw(): Promise<void> {
   } finally {
     savingRaw.value = false
   }
+}
+
+/** 标题栏「查找」按钮：打开编辑器的搜索面板 */
+function openRawSearch(): void {
+  rawEditorRef.value?.openSearch()
 }
 
 /** 插件设置：点击插件名，在配置文件尾部插入该插件的配置键模板 */
@@ -538,7 +545,15 @@ watch(activeTab, (tab) => {
         <section class="glass panel">
           <div class="panel-head-row">
             <div class="panel-title">Hexo 配置文件（_config.yml）</div>
-            <span v-if="rawFile" class="muted small path">{{ rawFile.path }}</span>
+            <n-space align="center" :size="10">
+              <span v-if="rawFile" class="muted small path">{{ rawFile.path }}</span>
+              <n-button size="tiny" secondary title="搜索配置文件内容（Ctrl+F）" @click="openRawSearch">
+                <template #icon>
+                  <n-icon :component="SearchOutline" />
+                </template>
+                查找
+              </n-button>
+            </n-space>
           </div>
           <div class="muted small" style="margin-bottom: 10px">
             直接编辑配置文件原文，适合配置表单未覆盖的字段和各插件的个性化配置。保存前自动校验

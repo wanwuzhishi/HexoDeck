@@ -4,7 +4,7 @@ import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import { yaml } from '@codemirror/lang-yaml'
-import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search'
+import { search, searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { oneDark } from '@codemirror/theme-one-dark'
 
@@ -220,7 +220,15 @@ function revealLine(lineIdx: number): void {
   cm.focus()
 }
 
-defineExpose({ revealLine })
+/** 打开查找/替换面板并聚焦搜索框（等价于 Ctrl+F） */
+function openSearch(): void {
+  const cm = view.value
+  if (!cm) return
+  // openSearchPanel 内部已把焦点移到搜索输入框，不能再调用 cm.focus()（会抢走焦点导致输入进正文）
+  openSearchPanel(cm)
+}
+
+defineExpose({ revealLine, openSearch })
 </script>
 
 <template>
