@@ -54,7 +54,7 @@ function toggleParams(): void {
 
 /** 自定义 front-matter 字段（不含内置的 title/date/tags/categories） */
 const BUILTIN_KEYS = ['title', 'date', 'tags', 'categories']
-const customFields = ref<Array<{ key: string; value: string }>>([])
+const customFields = ref<Array<{ key: string; value: string; label?: string }>>([])
 
 /** 值可能是数组/对象，统一转为可读字符串回填输入框 */
 function toFieldValue(v: unknown): string {
@@ -77,7 +77,10 @@ function extractCustomFields(fm: Record<string, unknown>): Array<{ key: string; 
   const sitePath = siteStore.site?.path
   const registered = sitePath ? (loadSiteFieldMap()[sitePath] ?? []) : []
   const seen = new Set(inFile.map((f) => f.key))
-  const extra = registered.filter((k) => !seen.has(k)).map((k) => ({ key: k, value: '' }))
+  // 登记过但本篇 front-matter 里没有的参数：补一个空值项（显示中文名）
+  const extra = registered
+    .filter((r) => !seen.has(r.key))
+    .map((r) => ({ key: r.key, value: '', label: r.label }))
 
   return [...inFile, ...extra]
 }
@@ -91,39 +94,69 @@ const readOnlyMeta = computed(() => {
     .map(([k, v]) => ({ key: k, value: toFieldValue(v) || '（空）' }))
 })
 
-/** 该站点已登记的自定义参数名（按站点路径绑定，切换站点各自独立） */
+/** 站点登记的自定义参数：key 为 front-matter 键名，label 为界面显示名（中文） */
+interface SiteField { key: string; label: string }
 const SITE_FIELDS_KEY = 'hexodeck-custom-fields'
-type SiteFieldMap = Record<string, string[]>
+// 按站点路径绑定；兼容旧版纯字符串数组（无中文名时以键名代显示）
+type SiteFieldMap = Record<string, SiteField[]>
+
+function normalizeSiteFields(raw: unknown): SiteField[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => {
+      if (typeof item === `string`) return { key: item, label: item }
+      const o = item as { key?: unknown; label?: unknown }
+      const key = typeof o.key === `string` ? o.key : ``
+      if (!key) return null
+      const label = typeof o.label === `string` && o.label ? o.label : key
+      return { key, label }
+    })
+    .filter((f): f is SiteField => f !== null)
+}
 
 function loadSiteFieldMap(): SiteFieldMap {
   try {
-    return JSON.parse(localStorage.getItem(SITE_FIELDS_KEY) ?? '{}') as SiteFieldMap
+    const parsed = JSON.parse(localStorage.getItem(SITE_FIELDS_KEY) ?? '{}') as Record<string, unknown>
+    const map: SiteFieldMap = {}
+    for (const [path, raw] of Object.entries(parsed)) {
+      map[path] = normalizeSiteFields(raw)
+    }
+    return map
   } catch {
     return {}
   }
 }
 
-function saveSiteFields(sitePath: string, keys: string[]): void {
+function saveSiteFields(sitePath: string, fields: SiteField[]): void {
   const map = loadSiteFieldMap()
-  if (keys.length) map[sitePath] = keys
+  if (fields.length) map[sitePath] = fields
   else delete map[sitePath]
   localStorage.setItem(SITE_FIELDS_KEY, JSON.stringify(map))
+}
+
+/** 取某键的中文显示名（登记表中有则用，否则显示键名） */
+function fieldLabel(key: string): string {
+  const sitePath = siteStore.site?.path
+  const f = sitePath ? loadSiteFieldMap()[sitePath]?.find((x) => x.key === key) : null
+  return f?.label ?? key
 }
 
 /** 把当前参数名列表写回该站点的登记表 */
 function persistSiteFields(): void {
   const sitePath = siteStore.site?.path
   if (!sitePath) return
-  saveSiteFields(sitePath, customFields.value.map((f) => f.key).filter(Boolean))
+  saveSiteFields(sitePath, customFields.value.map((f) => ({ key: f.key, label: (f as { label?: string }).label ?? fieldLabel(f.key) })))
 }
 
 /** 添加参数弹窗 */
 const showAddField = ref(false)
 const newFieldKey = ref('')
+const newFieldLabel = ref('')
 const addFieldError = ref('')
 
 function openAddField(): void {
   newFieldKey.value = ''
+  newFieldLabel.value = ''
   addFieldError.value = ''
   showAddField.value = true
 }
@@ -148,7 +181,7 @@ function confirmAddField(): void {
   }
 
   // 参数值属于每篇文章各自的内容，这里只登记字段名，值留空由用户填写
-  customFields.value.push({ key, value: '' })
+  customFields.value.push({ key, value: '', label: newFieldLabel.value.trim() || key })
   persistSiteFields()
   takeSnapshotOnly()
   showAddField.value = false
@@ -423,7 +456,7 @@ onBeforeUnmount(() => {
               <div v-if="customFields.length" class="custom-list">
                 <div v-for="(f, i) in customFields" :key="f.key" class="custom-item">
                   <div class="custom-head">
-                    <span class="custom-name" :title="f.key">{{ f.key }}</span>
+                    <span class="custom-name" :title="f.key">{{ fieldLabel(f.key) }}</span>
                     <n-button size="tiny" quaternary type="error" title="移除该参数" @click="removeCustomField(i)">
                       移除
                     </n-button>
@@ -433,7 +466,7 @@ onBeforeUnmount(() => {
                     size="small"
                     type="textarea"
                     :autosize="{ minRows: 1, maxRows: 4 }"
-                    :placeholder="`${f.key} 的值`"
+                    :placeholder="`${fieldLabel(f.key)} 的值`"
                   />
                 </div>
               </div>
@@ -467,7 +500,12 @@ onBeforeUnmount(() => {
       </div>
       <n-input
         v-model:value="newFieldKey"
-        placeholder="参数名称（英文键名）"
+        placeholder="英文键名，如 category"
+        @keyup.enter="confirmAddField"
+      />
+      <n-input
+        v-model:value="newFieldLabel"
+        placeholder="中文显示名（可选，如 分类）"
         @keyup.enter="confirmAddField"
       />
       <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
