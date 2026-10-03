@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
   NDataTable,
@@ -19,6 +19,7 @@ type PostRow = PostMeta & { snippet?: string }
 
 const posts = usePostsStore()
 const router = useRouter()
+const route = useRoute()
 
 // 关键词变化 300ms 后触发正文搜索（标题/标签即时本地过滤）
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -136,6 +137,12 @@ async function doCreate(): Promise<void> {
 
 onMounted(() => {
   if (!posts.loaded) posts.load()
+  // 站点页「写文章」快捷入口会带上 ?new=post|draft，进入后直接弹出新建框
+  const n = String(route.query.new ?? '')
+  if (n === 'post' || n === 'draft') {
+    openCreate(n)
+    router.replace({ path: '/posts' })
+  }
 })
 </script>
 
