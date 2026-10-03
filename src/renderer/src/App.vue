@@ -9,6 +9,7 @@ import { useSiteStore } from './stores/site'
 import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
 import InfoRail from './components/InfoRail.vue'
+import appIcon from './assets/app-icon.png'
 import { message, setDiscreteTheme } from './composables/message'
 
 const route = useRoute()
@@ -61,7 +62,7 @@ onMounted(async () => {
       <div class="shell">
         <aside class="sider glass" :class="{ collapsed: ui.navCollapsed }">
           <div class="brand">
-            <div class="logo"></div>
+            <img class="logo" :src="appIcon" alt="HexoDeck" />
             <span v-if="!ui.navCollapsed" class="brand-name">HexoDeck</span>
           </div>
           <n-menu
@@ -147,12 +148,13 @@ onMounted(async () => {
 }
 
 .logo {
-  width: 28px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   flex: none;
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
-  background: linear-gradient(140deg, var(--accent), var(--accent-2));
-  box-shadow: var(--accent-glow);
+  border-radius: 8px;
+  object-fit: contain;
+  /* 图标本身是深空底 + 青紫渐变六边形，加一层同色描边与光晕让它在玻璃上立起来 */
+  box-shadow: 0 0 10px var(--accent-soft);
 }
 
 .brand-name {
@@ -172,13 +174,27 @@ onMounted(async () => {
   background: transparent;
 }
 
+/* 菜单项内边距：让高亮背景铺满整行（原左内边距造成背景两侧留白） */
 .sider :deep(.n-menu-item-content) {
+  border-radius: 12px !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* naive-ui 用 ::before 绘制选中/悬停背景，这里让它撑满整个菜单项 */
+.sider :deep(.n-menu-item-content::before) {
+  left: 0 !important;
+  right: 0 !important;
   border-radius: 12px !important;
 }
 
-.sider :deep(.n-menu-item-content::before) {
-  left: 8px;
-  right: 8px;
+/* 走内边距而非伪元素偏移来保证图标与文字位置舒适 */
+.sider :deep(.n-menu-item-content-header) {
+  padding-left: 4px;
+}
+
+.sider :deep(.n-menu-item-content .n-menu-item-content__icon) {
+  margin-left: 10px;
 }
 
 .sider :deep(.n-menu-item-content--selected) {
