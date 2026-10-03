@@ -4,7 +4,8 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // chokidar / js-yaml / gray-matter 可能是 ESM-only 包，打进主进程包内而不是外部 require
+    plugins: [externalizeDepsPlugin({ exclude: ['chokidar', 'js-yaml', 'gray-matter'] })],
     resolve: {
       alias: {
         '@shared': resolve('src/shared')

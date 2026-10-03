@@ -1,3 +1,40 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
+import type { Api, BuildCommand, PostKind, PostPatch } from '../shared/ipc'
 
-contextBridge.exposeInMainWorld('hexodeck', { version: '0.1.0' })
+const api: Api = {
+  openSiteDialog: () => ipcRenderer.invoke('site:openDialog'),
+  openSite: (path: string) => ipcRenderer.invoke('site:open', path),
+  closeSite: () => ipcRenderer.invoke('site:close'),
+  createSite: (name: string, parentDir: string) => ipcRenderer.invoke('site:create', name, parentDir),
+  pickDirectory: () => ipcRenderer.invoke('site:pickDirectory'),
+  listRecentSites: () => ipcRenderer.invoke('site:recent'),
+
+  listPosts: () => ipcRenderer.invoke('post:list'),
+  readPost: (id: string) => ipcRenderer.invoke('post:read', id),
+  createPost: (kind: PostKind, title: string) => ipcRenderer.invoke('post:create', kind, title),
+  savePost: (id: string, patch: PostPatch) => ipcRenderer.invoke('post:save', id, patch),
+  deletePost: (id: string) => ipcRenderer.invoke('post:delete', id),
+  publishDraft: (id: string) => ipcRenderer.invoke('post:publishDraft', id),
+
+  runBuild: (command: BuildCommand) => ipcRenderer.invoke('build:run', command),
+  startPreview: (includeDrafts: boolean) => ipcRenderer.invoke('preview:start', includeDrafts),
+  stopPreview: () => ipcRenderer.invoke('preview:stop'),
+
+  onLog: (cb: (line: string) => void) => {
+    const handler = (_e: unknown, line: string): void => cb(line)
+    ipcRenderer.on('evt:log', handler)
+    return () => ipcRenderer.removeListener('evt:log', handler)
+  },
+  onFsChanged: (cb: () => void) => {
+    const handler = (): void => cb()
+    ipcRenderer.on('evt:fs', handler)
+    return () => ipcRenderer.removeListener('evt:fs', handler)
+  },
+  onPreviewStopped: (cb: () => void) => {
+    const handler = (): void => cb()
+    ipcRenderer.on('evt:preview-stopped', handler)
+    return () => ipcRenderer.removeListener('evt:preview-stopped', handler)
+  }
+}
+
+contextBridge.exposeInMainWorld('api', api)

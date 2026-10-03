@@ -9,7 +9,7 @@ export default defineConfigWithVueTs(
   },
   {
     name: 'app/files-to-ignore',
-    ignores: ['out/**', 'dist/**', 'resources/embed/**', 'node_modules/**']
+    ignores: ['out/**', 'dist/**', 'resources/embed/**', 'resources/child/**', 'node_modules/**']
   },
   pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,
