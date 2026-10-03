@@ -1,19 +1,28 @@
 <script setup lang="ts">
-import { computed, h, onMounted } from 'vue'
+import { computed, h, onMounted, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { darkTheme, dateZhCN, NIcon, zhCN } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import { DocumentTextOutline, HomeOutline, RocketOutline } from '@vicons/ionicons5'
+import { darkOverrides, lightOverrides } from './theme'
 import { useSiteStore } from './stores/site'
 import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
-import { message } from './composables/message'
+import InfoRail from './components/InfoRail.vue'
+import { message, setDiscreteTheme } from './composables/message'
 
 const route = useRoute()
 const router = useRouter()
 const siteStore = useSiteStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
+
+// 主题：body 类（驱动 CSS 变量）+ 独立 message 弹层主题
+watchEffect(() => {
+  document.body.classList.toggle('theme-dark', ui.isDark)
+  document.body.classList.toggle('theme-light', !ui.isDark)
+  setDiscreteTheme(ui.isDark)
+})
 
 const renderIcon = (icon: unknown) => (): ReturnType<typeof h> =>
   h(NIcon, null, { default: () => h(icon as never) })
@@ -25,6 +34,9 @@ const menuOptions: MenuOption[] = [
 ]
 
 const activeKey = computed(() => (route.path.startsWith('/editor') ? '/posts' : route.path))
+
+// 编辑器页聚焦写作，隐藏右侧信息栏
+const showRail = computed(() => route.name !== 'editor')
 
 function onMenu(key: string): void {
   router.push(key)
@@ -38,67 +50,157 @@ onMounted(async () => {
 </script>
 
 <template>
-  <n-config-provider :theme="ui.isDark ? darkTheme : null" :locale="zhCN" :date-locale="dateZhCN">
+  <n-config-provider
+    :theme="ui.isDark ? darkTheme : null"
+    :theme-overrides="ui.isDark ? darkOverrides : lightOverrides"
+    :locale="zhCN"
+    :date-locale="dateZhCN"
+  >
     <n-message-provider>
-      <n-layout has-sider class="root">
-        <n-layout-sider bordered :width="190" content-style="display:flex;flex-direction:column;height:100%">
+      <div class="shell">
+        <aside class="sider glass" :class="{ collapsed: ui.navCollapsed }">
           <div class="brand">
-            <span class="brand-name">HexoDeck</span>
-            <span class="brand-sub">Hexo 管理工具</span>
+            <div class="logo"></div>
+            <span v-if="!ui.navCollapsed" class="brand-name">HexoDeck</span>
           </div>
-          <n-menu :value="activeKey" :options="menuOptions" @update:value="onMenu" />
-          <div class="sider-footer">
-            <template v-if="siteStore.site">
-              <div class="site-name" :title="siteStore.site.path">{{ siteStore.site.name }}</div>
-            </template>
-            <div v-else class="site-name muted">未打开站点</div>
+          <n-menu
+            class="nav"
+            :value="activeKey"
+            :options="menuOptions"
+            :collapsed="ui.navCollapsed"
+            :collapsed-width="64"
+            :collapsed-icon-size="20"
+            @update:value="onMenu"
+          />
+          <div class="sider-foot">
+            <n-button
+              quaternary
+              circle
+              size="small"
+              :title="ui.isDark ? '切换到亮色主题' : '切换到暗色主题'"
+              @click="ui.toggle"
+            >
+              {{ ui.isDark ? '☾' : '☀' }}
+            </n-button>
+            <span v-if="!ui.navCollapsed" class="foot-site" :title="siteStore.site?.path">
+              {{ siteStore.site?.name ?? '未打开站点' }}
+            </span>
+            <n-button
+              quaternary
+              circle
+              size="small"
+              :title="ui.navCollapsed ? '展开导航' : '折叠导航'"
+              @click="ui.toggleNav"
+            >
+              {{ ui.navCollapsed ? '»' : '«' }}
+            </n-button>
           </div>
-        </n-layout-sider>
-        <n-layout class="main-layout">
+        </aside>
+
+        <main class="main">
           <router-view />
-        </n-layout>
-      </n-layout>
+        </main>
+
+        <InfoRail v-if="showRail" class="rail" />
+      </div>
     </n-message-provider>
   </n-config-provider>
 </template>
 
 <style scoped>
-.root {
+.shell {
+  display: flex;
+  gap: 12px;
   height: 100vh;
+  padding: 12px;
+  box-sizing: border-box;
 }
-.brand {
-  padding: 18px 20px 10px;
+
+.sider {
+  width: 208px;
+  flex: none;
   display: flex;
   flex-direction: column;
+  padding: 14px 10px 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: width 0.22s ease;
 }
+
+.sider.collapsed {
+  width: 68px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px 14px;
+  overflow: hidden;
+}
+
+.logo {
+  width: 28px;
+  height: 32px;
+  flex: none;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  box-shadow: var(--accent-glow);
+}
+
 .brand-name {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-.brand-sub {
-  font-size: 12px;
-  opacity: 0.6;
-  margin-top: 2px;
-}
-.sider-footer {
-  margin-top: auto;
-  padding: 12px 20px;
-  border-top: 1px solid rgba(128, 128, 128, 0.25);
-}
-.site-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.4px;
+  color: var(--text-1);
   white-space: nowrap;
+}
+
+.nav {
+  flex: 1;
+  min-height: 0;
+}
+
+.sider :deep(.n-menu) {
+  background: transparent;
+}
+
+.sider :deep(.n-menu-item-content) {
+  border-radius: 12px !important;
+}
+
+.sider :deep(.n-menu-item-content::before) {
+  left: 8px;
+  right: 8px;
+}
+
+.sider :deep(.n-menu-item-content--selected) {
+  background: var(--accent-soft) !important;
+  box-shadow: inset 0 0 0 1px var(--glass-border), 0 0 10px var(--accent-soft);
+}
+
+.sider-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.foot-site {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
-.muted {
-  opacity: 0.5;
-  font-weight: 400;
-}
-.main-layout {
-  height: 100vh;
-  overflow: hidden;
+
+.main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  border-radius: var(--radius-lg);
 }
 </style>

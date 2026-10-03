@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { NButton, NCard, NCheckbox, NPopconfirm, NSpace, NTag } from 'naive-ui'
+import { NButton, NCheckbox, NPopconfirm, NSpace, NTag } from 'naive-ui'
 import { useWorkspaceStore } from '../stores/workspace'
 import { message } from '../composables/message'
 
@@ -51,9 +51,10 @@ watch(
 
 <template>
   <div class="page publish-page">
-    <n-card title="本地预览" :bordered="false">
+    <section class="glass panel">
+      <div class="panel-title">本地预览</div>
       <n-space align="center" :size="10">
-        <n-tag :type="ws.previewUrl ? 'success' : 'default'" :bordered="false">
+        <n-tag :type="ws.previewUrl ? 'success' : 'default'" :bordered="false" round>
           {{ ws.previewUrl ? '运行中' : '未启动' }}
         </n-tag>
         <span v-if="ws.previewUrl" class="url">{{ ws.previewUrl }}</span>
@@ -69,9 +70,10 @@ watch(
         <iframe ref="frame" :src="ws.previewUrl" class="preview-frame"></iframe>
       </div>
       <div v-else class="frame-empty">启动预览后，这里将显示主题渲染后的真实博客页面</div>
-    </n-card>
+    </section>
 
-    <n-card title="构建与部署" :bordered="false">
+    <section class="glass panel">
+      <div class="panel-title">构建与部署</div>
       <n-space>
         <n-button
           type="primary"
@@ -93,60 +95,75 @@ watch(
           清理缓存
         </n-button>
       </n-space>
-    </n-card>
+    </section>
 
-    <n-card title="运行日志" :bordered="false" class="log-card">
+    <section class="glass panel log-panel">
+      <div class="panel-title">运行日志</div>
       <pre ref="logEl" class="log">{{ ws.logs.join('\n') || '暂无日志' }}</pre>
-    </n-card>
+    </section>
   </div>
 </template>
 
 <style scoped>
 .publish-page {
-  padding: 18px 22px;
-  height: 100vh;
-  overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+  min-height: 100%;
+  box-sizing: border-box;
 }
+
 .url {
-  font-family: Consolas, monospace;
+  font-family: var(--mono);
+  color: var(--accent);
 }
+
 .frame-wrap {
-  margin-top: 14px;
+  margin-top: 12px;
   height: 420px;
 }
+
 .preview-frame {
   width: 100%;
   height: 100%;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  box-shadow: var(--glass-glow);
 }
+
 .frame-empty {
-  margin-top: 14px;
-  height: 120px;
+  margin-top: 12px;
+  height: 110px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed rgba(128, 128, 128, 0.35);
-  border-radius: 6px;
-  opacity: 0.6;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius);
+  color: var(--text-3);
 }
-.log-card {
+
+.log-panel {
   flex: 1;
-  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  min-height: 160px;
 }
+
 .log {
   margin: 0;
-  height: 100%;
+  flex: 1;
   max-height: 320px;
   overflow: auto;
-  font-family: Consolas, 'Courier New', monospace;
+  font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
+  color: var(--text-2);
+  background: var(--accent-soft);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 </style>

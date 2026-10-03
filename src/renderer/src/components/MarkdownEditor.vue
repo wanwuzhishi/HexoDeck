@@ -27,12 +27,12 @@ function createView(): EditorView {
       EditorView.lineWrapping,
       themeCompartment.of(props.dark ? oneDark : []),
       EditorView.theme({
-        '&': { fontSize: '14px', height: '100%' },
+        '&': { fontSize: '14px', height: '100%', backgroundColor: 'transparent' },
         '.cm-scroller': {
           fontFamily: "Consolas, 'Courier New', monospace",
           lineHeight: '1.7'
         },
-        '.cm-gutters': { backgroundColor: 'transparent' }
+        '.cm-gutters': { backgroundColor: 'transparent', borderRight: 'none' }
       }),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) emit('update:modelValue', u.state.doc.toString())
@@ -252,13 +252,15 @@ const toolsLine2: Array<Tool | 'sep'> = [
   min-width: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(128, 128, 128, 0.25);
-  border-radius: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  box-shadow: var(--glass-glow);
   overflow: hidden;
 }
 .toolbar {
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-  background: rgba(128, 128, 128, 0.06);
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--accent-soft);
   padding: 3px 6px;
   display: flex;
   flex-direction: column;

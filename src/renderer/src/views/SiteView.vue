@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { NButton, NCard, NDescriptions, NDescriptionsItem, NEmpty, NForm, NFormItem, NInput, NInputGroup, NList, NListItem, NModal, NPopconfirm, NSpace, NThing } from 'naive-ui'
+import { NButton, NDescriptions, NDescriptionsItem, NEmpty, NForm, NFormItem, NInput, NInputGroup, NModal, NPopconfirm, NSpace } from 'naive-ui'
 import { useSiteStore } from '../stores/site'
 import { message } from '../composables/message'
 
@@ -47,8 +47,9 @@ async function closeSite(): Promise<void> {
 <template>
   <div class="page">
     <template v-if="siteStore.site">
-      <n-card title="站点信息">
-        <n-descriptions bordered :column="2" label-placement="left">
+      <section class="glass panel">
+        <div class="panel-title">站点信息</div>
+        <n-descriptions :column="2" label-placement="left" size="small">
           <n-descriptions-item label="站点标题">{{ siteStore.site.title || '—' }}</n-descriptions-item>
           <n-descriptions-item label="副标题">{{ siteStore.site.subtitle || '—' }}</n-descriptions-item>
           <n-descriptions-item label="路径">{{ siteStore.site.path }}</n-descriptions-item>
@@ -56,52 +57,48 @@ async function closeSite(): Promise<void> {
             {{ siteStore.site.postCount }} 篇文章 · {{ siteStore.site.draftCount }} 篇草稿
           </n-descriptions-item>
         </n-descriptions>
-        <template #footer>
-          <n-space>
-            <n-button @click="siteStore.openViaDialog()">切换站点</n-button>
-            <n-popconfirm @positive-click="closeSite">
-              <template #trigger>
-                <n-button quaternary type="warning">关闭站点</n-button>
-              </template>
-              关闭后需要重新选择站点目录，确定吗？
-            </n-popconfirm>
-          </n-space>
-        </template>
-      </n-card>
+        <n-space class="actions">
+          <n-button @click="siteStore.openViaDialog()">切换站点</n-button>
+          <n-popconfirm @positive-click="closeSite">
+            <template #trigger>
+              <n-button quaternary type="warning">关闭站点</n-button>
+            </template>
+            关闭后需要重新选择站点目录，确定吗？
+          </n-popconfirm>
+        </n-space>
+      </section>
     </template>
 
     <template v-else>
-      <n-card title="打开 Hexo 站点">
-        <n-space vertical :size="20">
-          <n-empty description="选择一个包含 _config.yml 的 Hexo 站点目录">
-            <template #extra>
-              <n-space>
-                <n-button type="primary" :loading="siteStore.loading" @click="siteStore.openViaDialog()">
-                  打开站点目录
-                </n-button>
-                <n-button @click="showCreate = true">新建站点</n-button>
-              </n-space>
-            </template>
-          </n-empty>
+      <section class="glass panel">
+        <div class="panel-title">打开 Hexo 站点</div>
+        <n-empty description="选择一个包含 _config.yml 的 Hexo 站点目录">
+          <template #extra>
+            <n-space>
+              <n-button type="primary" :loading="siteStore.loading" @click="siteStore.openViaDialog()">
+                打开站点目录
+              </n-button>
+              <n-button @click="showCreate = true">新建站点</n-button>
+            </n-space>
+          </template>
+        </n-empty>
 
-          <div v-if="siteStore.recents.length">
-            <h3 class="recent-title">最近打开</h3>
-            <n-list hoverable clickable>
-              <n-list-item v-for="r in siteStore.recents" :key="r.path" @click="siteStore.open(r.path)">
-                <n-thing :title="r.name" :description="r.path" />
-              </n-list-item>
-            </n-list>
+        <div v-if="siteStore.recents.length" class="recents">
+          <h3 class="recent-title muted">最近打开</h3>
+          <div
+            v-for="r in siteStore.recents"
+            :key="r.path"
+            class="recent-item"
+            @click="siteStore.open(r.path)"
+          >
+            <span class="r-name">{{ r.name }}</span>
+            <span class="r-path muted small">{{ r.path }}</span>
           </div>
-        </n-space>
-      </n-card>
+        </div>
+      </section>
     </template>
 
-    <n-modal
-      v-model:show="showCreate"
-      preset="card"
-      title="新建 Hexo 站点"
-      style="width: 520px"
-    >
+    <n-modal v-model:show="showCreate" preset="card" title="新建 Hexo 站点" style="width: 520px">
       <n-form label-placement="left" :label-width="90">
         <n-form-item label="站点名称">
           <n-input v-model:value="createForm.name" placeholder="例如：my-blog（作为目录名）" />
@@ -124,11 +121,44 @@ async function closeSite(): Promise<void> {
 </template>
 
 <style scoped>
-.page {
-  padding: 18px 22px;
+.actions {
+  margin-top: 14px;
 }
+
+.recents {
+  margin-top: 18px;
+}
+
 .recent-title {
-  font-size: 14px;
+  font-size: 13px;
   margin: 0 0 8px;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.recent-item:hover {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--glass-border), var(--accent-glow);
+}
+
+.r-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.r-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

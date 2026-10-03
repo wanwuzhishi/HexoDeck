@@ -248,11 +248,13 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .editor-page {
-  height: 100vh;
+  height: 100%;
+  min-height: 540px;
   display: flex;
   flex-direction: column;
-  padding: 14px 22px 10px;
+  padding: 2px 4px 8px;
   gap: 10px;
+  box-sizing: border-box;
 }
 .editor-header {
   display: flex;
@@ -264,6 +266,7 @@ onBeforeUnmount(() => {
 .title {
   font-size: 18px;
   font-weight: 700;
+  color: var(--text-1);
 }
 .meta-row {
   display: flex;
@@ -293,21 +296,24 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
   overflow: auto;
-  padding: 4px 14px;
-  border: 1px solid rgba(128, 128, 128, 0.25);
-  border-radius: 4px;
+  padding: 4px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow: var(--glass-glow);
 }
 .status-bar {
   font-size: 12px;
-  opacity: 0.65;
+  color: var(--text-2);
   display: flex;
   gap: 4px;
 }
 .hint {
-  opacity: 0.8;
+  color: var(--accent);
 }
 .label {
   font-size: 13px;
-  opacity: 0.7;
+  color: var(--text-2);
 }
 </style>

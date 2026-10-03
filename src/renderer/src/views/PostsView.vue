@@ -3,7 +3,6 @@ import { h, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NButton,
-  NCard,
   NDataTable,
   NInput,
   NModal,
@@ -141,14 +140,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page page-full">
-    <n-card :bordered="false">
-      <template #header>文章管理</template>
-      <template #header-extra>
+  <div class="page">
+    <section class="glass panel">
+      <div class="panel-head">
+        <div class="panel-title">文章管理</div>
         <n-space>
           <n-input
             v-model:value="posts.keyword"
-            placeholder="搜索标题 / 标签 / 分类"
+            placeholder="搜索标题 / 标签 / 正文"
             clearable
             style="width: 220px"
           />
@@ -156,17 +155,17 @@ onMounted(() => {
           <n-button @click="openCreate('draft')">新建草稿</n-button>
           <n-button quaternary @click="posts.load()">刷新</n-button>
         </n-space>
-      </template>
+      </div>
 
       <n-data-table
+        class="posts-table"
         :columns="columns"
         :data="posts.filtered"
-        :row-key="(row: PostMeta) => row.id"
+        :row-key="(row: PostRow) => row.id"
         :bordered="false"
         size="small"
-        style="margin-top: 12px"
       />
-    </n-card>
+    </section>
 
     <n-modal v-model:show="showCreate" preset="card" style="width: 440px" :title="createKind === 'post' ? '新建文章' : '新建草稿'">
       <n-input v-model:value="createTitle" placeholder="文章标题" @keyup.enter="doCreate" />
@@ -181,22 +180,41 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.page-full {
-  height: 100vh;
+.panel-head {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
 }
+
+.posts-table {
+  background: transparent;
+}
+
+.posts-table :deep(.n-data-table-th) {
+  background: transparent;
+}
+
+.posts-table :deep(.n-data-table-td) {
+  background: transparent;
+}
+
 .post-link {
   cursor: pointer;
-  color: #2080f0;
+  color: var(--accent);
   text-decoration: none;
 }
+
 .post-link:hover {
   text-decoration: underline;
 }
+
 .muted-cell {
   opacity: 0.4;
 }
+
 .snippet {
   font-size: 12px;
   opacity: 0.55;
