@@ -88,7 +88,7 @@ watch(
 
 <template>
   <div class="page">
-    <n-spin :show="loading">
+    <n-spin :show="loading" class="spin-wrap">
       <template v-if="stats">
         <section class="glass panel">
           <div class="panel-head-row">
@@ -219,11 +219,17 @@ watch(
 </template>
 
 <style scoped>
-/* 页面纵向节奏：各区块统一 14px 间隔（全局 .page 只有 padding，不加会上下紧贴） */
-.page {
+/* n-spin 会渲染成 n-spin-container > n-spin-content > 插槽内容，
+   卡片（section.glass）的直接父级是 n-spin-content，间距必须加在它上面，
+   加在外层 .page 或中间层都不会生效 */
+.spin-wrap :deep(.n-spin-content) {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.page {
+  padding: 4px 6px;
 }
 
 .panel-head-row {
@@ -248,16 +254,33 @@ watch(
 }
 
 .stat-grid {
+  /* 固定 3 列：概览 6 项正好排成 3×2，避免 auto-fit 出现 5+1 的孤行 */
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
 }
 
 .stat-grid.four {
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  /* 活跃度 4 项排成 2×2，窄窗口下更稳 */
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* 宽屏时改为一行铺满，避免卡片过宽留白 */
+@media (min-width: 1100px) {
+  .stat-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .stat-grid.four {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .stat-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 86px;
   padding: 14px 16px;
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
