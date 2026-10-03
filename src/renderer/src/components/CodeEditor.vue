@@ -35,23 +35,96 @@ const phrases = EditorState.phrases.of({
 })
 
 const baseTheme = EditorView.theme({
-  '&': { fontSize: '13px', height: '100%', backgroundColor: 'transparent' },
+  '&': { fontSize: '14px', height: '100%', backgroundColor: 'transparent' },
   '.cm-scroller': {
     fontFamily: "Consolas, 'Courier New', monospace",
-    lineHeight: '1.65'
+    lineHeight: '1.7'
   },
-  '.cm-gutters': { backgroundColor: 'transparent', borderRight: 'none' },
+  '.cm-content': { caretColor: 'var(--accent)', padding: '10px 0' },
+  '.cm-gutters': {
+    backgroundColor: 'transparent',
+    borderRight: '1px solid var(--bg-grid)',
+    color: 'var(--text-3)'
+  },
   '.cm-activeLine': { backgroundColor: 'var(--accent-soft)' },
-  '.cm-panels': {
+  '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--accent)' },
+
+  // 查找/替换面板：玻璃拟态，与全局 UI 统一
+  '.cm-panels': { backgroundColor: 'transparent', color: 'var(--text-1)' },
+  '.cm-panel.cm-search': {
     backgroundColor: 'var(--glass-strong)',
+    backdropFilter: 'blur(18px) saturate(1.5)',
+    padding: '12px 16px',
+    borderBottom: '1px solid var(--glass-border)',
+    boxShadow: 'var(--glass-glow)',
+    fontSize: '13px'
+  },
+  '.cm-search label': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '7px',
+    marginRight: '12px'
+  },
+  '.cm-search input:not([type=checkbox])': {
+    background: 'var(--accent-soft)',
+    border: '1px solid var(--glass-border)',
+    borderRadius: '9px',
+    padding: '6px 12px',
     color: 'var(--text-1)',
-    borderBottom: '1px solid var(--glass-border)'
+    font: 'inherit',
+    outline: 'none',
+    minWidth: '180px',
+    transition: 'border-color .15s ease, box-shadow .15s ease'
   },
-  '.cm-panel.cm-search input, .cm-panel.cm-search button': {
-    borderRadius: '8px'
+  '.cm-search input:not([type=checkbox]):focus': {
+    borderColor: 'var(--accent)',
+    boxShadow: 'var(--accent-glow)'
   },
-  '.cm-searchMatch': { outline: '1px solid var(--accent)' },
-  '.cm-searchMatch-selected': { backgroundColor: 'var(--accent-soft)' }
+  '.cm-search input[type=checkbox]': {
+    accentColor: 'var(--accent)',
+    width: '14px',
+    height: '14px'
+  },
+  '.cm-search .cm-button-row': {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '7px',
+    marginTop: '10px'
+  },
+  '.cm-search button': {
+    background: 'var(--accent-soft)',
+    border: '1px solid var(--glass-border)',
+    borderRadius: '9px',
+    padding: '5px 14px',
+    color: 'var(--text-1)',
+    font: 'inherit',
+    cursor: 'pointer',
+    transition: 'border-color .15s ease, box-shadow .15s ease, color .15s ease'
+  },
+  '.cm-search button:hover': {
+    borderColor: 'var(--accent)',
+    boxShadow: 'var(--accent-glow)',
+    color: 'var(--accent)'
+  },
+  '.cm-search button[name=close]': {
+    borderRadius: '999px',
+    padding: '5px 11px',
+    marginLeft: 'auto'
+  },
+
+  // 匹配高亮：主色描边 + 半透明填充，替代默认黄色
+  '.cm-searchMatch': {
+    outline: '1px solid var(--accent)',
+    backgroundColor: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+    borderRadius: '2px'
+  },
+  '.cm-searchMatch-selected': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 40%, transparent)'
+  },
+  '.cm-selectionMatch': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 14%, transparent)'
+  }
 })
 
 function createView(): EditorView {
