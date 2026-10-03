@@ -353,6 +353,22 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
+// 站点切换时：当前文章属于旧站点，必须清空编辑状态并回文章列表，
+// 否则会把 A 站的文章保存进 B 站（数据串站）；参数侧栏也会随 load 重新提取
+watch(
+  () => siteStore.site?.path,
+  (newPath, oldPath) => {
+    if (oldPath === undefined) return // 首次赋值不算切换
+    if (newPath === oldPath) return
+    if (detail.value) {
+      detail.value = null
+      snapshot.value = ''
+      router.replace('/posts')
+      message.info('站点已切换，已返回文章列表')
+    }
+  }
+)
+
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   posts.load()
@@ -498,16 +514,25 @@ onBeforeUnmount(() => {
       <div class="muted small" style="margin-bottom: 10px">
         参数名即 front-matter 的键名，如 <code>permalink</code>、<code>cover</code>、<code>sticky</code>、<code>comments</code>。
       </div>
-      <n-input
-        v-model:value="newFieldKey"
-        placeholder="英文键名，如 category"
-        @keyup.enter="confirmAddField"
-      />
-      <n-input
-        v-model:value="newFieldLabel"
-        placeholder="中文显示名（可选，如 分类）"
-        @keyup.enter="confirmAddField"
-      />
+      <div class="field-inputs">
+        <div class="field-col">
+          <div class="field-col-label">中文显示名 <span class="muted small">（可选）</span></div>
+          <n-input
+            v-model:value="newFieldLabel"
+            placeholder="如 分类"
+            @keyup.enter="confirmAddField"
+          />
+        </div>
+        <div class="field-col">
+          <div class="field-col-label">英文键名 <span class="muted small">（必填）</span></div>
+          <n-input
+            v-model:value="newFieldKey"
+            placeholder="如 category"
+            @keyup.enter="confirmAddField"
+          />
+        </div>
+      </div>
+      <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
       <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
       <template #footer>
         <n-space justify="end">
@@ -627,6 +652,30 @@ onBeforeUnmount(() => {
 }
 .custom-key {
   font-family: var(--mono);
+}
+
+/* 添加参数弹窗：中文显示名（左）/ 英文键名（右） */
+.field-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.field-col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-col-label {
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.add-field-error {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--danger);
 }
 .meta-list {
   display: flex;
