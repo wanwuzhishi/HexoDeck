@@ -6,6 +6,13 @@ import type { AppConfig } from './services/config-service'
 import { getLogFile, logLine } from './services/logger'
 import { runtimeFlags } from './services/runtime-flags'
 import {
+  checkForUpdates,
+  initUpdater,
+  quitAndInstall,
+  setAutoCheck,
+  setUpdateEmitter
+} from './services/updater'
+import {
   createSite,
   openSite as openSiteInfo
 } from './services/site-service'
@@ -51,6 +58,7 @@ export interface IpcContext {
 const EVT_LOG = 'evt:log'
 const EVT_FS = 'evt:fs'
 const EVT_PREVIEW_STOPPED = 'evt:preview-stopped'
+const EVT_UPDATE_STATUS = 'evt:update-status'
 
 export function registerIpc(ctx: IpcContext): void {
   // 渲染进程异常上报：落地到 userData/renderer-error.log，便于排查无控制台的打包环境
@@ -153,21 +161,38 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ============ 应用信息与设置（M4） ============
 
-  ipcMain.handle('app:info', async () => ({
-    version: app.getVersion(),
-    logFile: getLogFile(),
-    closeToTray: (await ctx.config.getSettings()).closeToTray
-  }))
+  // 自动更新：状态推送到所有窗口
+  setUpdateEmitter((s) => broadcast(EVT_UPDATE_STATUS, s))
+  initUpdater()
+
+  ipcMain.handle('app:info', async () => {
+    const settings = await ctx.config.getSettings()
+    return {
+      version: app.getVersion(),
+      logFile: getLogFile(),
+      closeToTray: settings.closeToTray,
+      autoCheckUpdate: settings.autoCheckUpdate
+    }
+  })
 
   ipcMain.handle('app:saveSettings', async (_e, patch: Partial<AppSettings>) => {
     try {
       const settings = await ctx.config.patchSettings(patch)
       runtimeFlags.closeToTray = settings.closeToTray
+      setAutoCheck(settings.autoCheckUpdate)
       void logLine(`应用设置已更新: ${JSON.stringify(settings)}`)
       return { ok: true, data: settings }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }
+  })
+
+  ipcMain.handle('app:checkUpdate', async () => {
+    void checkForUpdates()
+  })
+
+  ipcMain.handle('app:installUpdate', async () => {
+    quitAndInstall()
   })
 
   ipcMain.handle('app:openLogs', async () => {

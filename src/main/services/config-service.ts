@@ -8,7 +8,8 @@ export interface AppConfigState {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  closeToTray: false
+  closeToTray: false,
+  autoCheckUpdate: true
 }
 
 /** 应用配置持久化（userData/hexodeck.json） */

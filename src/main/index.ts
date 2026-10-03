@@ -5,6 +5,7 @@ import { AppConfig } from './services/config-service'
 import { initLogger } from './services/logger'
 import { createTray, focusWindow, notifyHidden } from './services/tray'
 import { runtimeFlags } from './services/runtime-flags'
+import { scheduleUpdateChecks, setAutoCheck } from './services/updater'
 import type { ChildBase } from './services/hexo-process-service'
 
 /** 子进程脚本与内嵌 hexo 的位置：开发时在项目目录，打包后在 app.asar.unpacked */
@@ -77,9 +78,12 @@ if (!gotLock) {
 
     const config = new AppConfig(join(app.getPath('userData'), 'hexodeck.json'))
     await initLogger(app.getPath('userData'))
-    runtimeFlags.closeToTray = (await config.getSettings()).closeToTray
+    const settings = await config.getSettings()
+    runtimeFlags.closeToTray = settings.closeToTray
+    setAutoCheck(settings.autoCheckUpdate)
 
     registerIpc({ childBase, config })
+    scheduleUpdateChecks()
 
     mainWindow = createWindow()
 

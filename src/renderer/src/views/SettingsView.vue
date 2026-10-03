@@ -8,6 +8,7 @@ import {
   NInput,
   NInputNumber,
   NPopconfirm,
+  NProgress,
   NSelect,
   NSpace,
   NSwitch,
@@ -119,6 +120,7 @@ async function installNew(): Promise<void> {
 // ---------- 应用设置 ----------
 const appInfo = ref<AppInfo | null>(null)
 const closeToTray = ref(false)
+const autoCheckUpdate = ref(true)
 
 const autoSaveSeconds = computed({
   get: () => ui.autoSaveDelay / 1000,
@@ -135,6 +137,54 @@ async function onCloseToTrayChange(v: boolean): Promise<void> {
     message.error(r.error ?? '保存失败')
   }
 }
+
+async function onAutoCheckChange(v: boolean): Promise<void> {
+  const r = await window.api.saveAppSettings({ autoCheckUpdate: v })
+  if (r.ok) {
+    autoCheckUpdate.value = r.data?.autoCheckUpdate ?? v
+    message.success(v ? '已开启自动检查更新' : '已关闭自动检查更新')
+  } else {
+    autoCheckUpdate.value = !v
+    message.error(r.error ?? '保存失败')
+  }
+}
+
+function checkUpdate(): void {
+  void window.api.checkForUpdate()
+}
+
+function installUpdate(): void {
+  void window.api.installUpdate()
+}
+
+/** 更新状态文案与样式 */
+const updateStateText = computed(() => {
+  const s = ws.updateStatus
+  switch (s.state) {
+    case 'idle':
+      return '尚未检查'
+    case 'checking':
+      return '正在检查…'
+    case 'not-available':
+      return `已是最新版本（v${s.version ?? appInfo.value?.version ?? ''}）`
+    case 'available':
+      return `发现新版本 v${s.version}，开始下载…`
+    case 'downloading':
+      return `下载中 ${Math.round(s.percent ?? 0)}%`
+    case 'downloaded':
+      return `新版本 v${s.version} 已就绪，重启后生效`
+    case 'error':
+      return `检查失败：${s.message ?? '未知错误'}`
+    case 'unsupported':
+      return s.message ?? '当前环境不支持自动更新'
+    default:
+      return ''
+  }
+})
+
+const updateStateOk = computed(
+  () => ws.updateStatus.state === 'not-available' || ws.updateStatus.state === 'downloaded'
+)
 
 /** 打开日志文件夹 */
 function openLogs(): void {
@@ -167,6 +217,7 @@ async function loadAll(): Promise<void> {
     if (pl.ok && pl.data) plugins.value = pl.data
     appInfo.value = info
     closeToTray.value = info.closeToTray
+    autoCheckUpdate.value = info.autoCheckUpdate
   } finally {
     loading.value = false
   }
@@ -657,6 +708,51 @@ watch(activeTab, (tab) => {
         </section>
 
         <section class="glass panel">
+          <div class="panel-title">更新</div>
+          <div class="form-narrow">
+            <n-form label-placement="left" :label-width="110">
+              <n-form-item label="当前版本">
+                <span class="muted">HexoDeck v{{ appInfo?.version ?? '—' }}</span>
+              </n-form-item>
+              <n-form-item label="自动检查">
+                <n-space align="center">
+                  <n-switch :value="autoCheckUpdate" @update:value="onAutoCheckChange" />
+                  <span class="muted small">启动时及每 6 小时检查一次 GitHub Releases</span>
+                </n-space>
+              </n-form-item>
+              <n-form-item label="更新状态">
+                <n-space align="center" :size="10">
+                  <span :class="['update-state', updateStateOk ? 'ok' : '', ws.updateStatus.state === 'error' ? 'err' : '']">
+                    {{ updateStateText }}
+                  </span>
+                  <n-progress
+                    v-if="ws.updateStatus.state === 'downloading'"
+                    type="line"
+                    :percentage="Math.round(ws.updateStatus.percent ?? 0)"
+                    :show-indicator="false"
+                    :height="6"
+                    style="width: 180px"
+                  />
+                </n-space>
+              </n-form-item>
+            </n-form>
+            <n-space>
+              <n-button size="small" :loading="ws.updateStatus.state === 'checking'" @click="checkUpdate">
+                立即检查更新
+              </n-button>
+              <n-button
+                v-if="ws.updateStatus.state === 'downloaded'"
+                size="small"
+                type="primary"
+                @click="installUpdate"
+              >
+                重启并安装 v{{ ws.updateStatus.version }}
+              </n-button>
+            </n-space>
+          </div>
+        </section>
+
+        <section class="glass panel">
           <div class="panel-title">窗口与日志</div>
           <div class="form-narrow">
             <n-form label-placement="left" :label-width="110">
@@ -671,9 +767,6 @@ watch(activeTab, (tab) => {
                   <n-button size="small" @click="openLogs">打开日志文件夹</n-button>
                   <span class="muted small path">{{ appInfo?.logFile || '（启动后生成）' }}</span>
                 </n-space>
-              </n-form-item>
-              <n-form-item label="版本">
-                <span class="muted">HexoDeck v{{ appInfo?.version ?? '—' }}</span>
               </n-form-item>
             </n-form>
           </div>
@@ -701,6 +794,19 @@ watch(activeTab, (tab) => {
   background: color-mix(in srgb, var(--warn) 10%, transparent);
   color: var(--text-1);
   font-size: 13px;
+}
+
+.update-state {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.update-state.ok {
+  color: var(--ok);
+}
+
+.update-state.err {
+  color: var(--danger);
 }
 
 .panel-head-row {
@@ -775,21 +881,6 @@ watch(activeTab, (tab) => {
 
 .theme-editor {
   height: 300px;
-}
-
-.warn-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--warn);
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
-  color: var(--text-1);
-  font-size: 13px;
 }
 
 .plugin-key-list {

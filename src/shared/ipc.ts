@@ -122,12 +122,31 @@ export interface PluginInfo {
 export interface AppSettings {
   /** 关闭窗口时最小化到托盘而非退出 */
   closeToTray: boolean
+  /** 启动时自动检查更新 */
+  autoCheckUpdate: boolean
 }
 
 export interface AppInfo {
   version: string
   logFile: string
   closeToTray: boolean
+  autoCheckUpdate: boolean
+}
+
+/** 自动更新状态（主进程推送） */
+export interface UpdateStatus {
+  state:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'not-available'
+    | 'downloading'
+    | 'downloaded'
+    | 'error'
+    | 'unsupported'
+  version?: string
+  percent?: number
+  message?: string
 }
 
 /** preload 暴露给渲染进程的 API（window.api） */
@@ -144,6 +163,11 @@ export interface Api {
   getAppInfo(): Promise<AppInfo>
   saveAppSettings(patch: Partial<AppSettings>): Promise<Result<AppSettings>>
   openLogFolder(): Promise<void>
+  /** 手动检查更新（结果通过 onUpdateStatus 推送） */
+  checkForUpdate(): Promise<void>
+  /** 退出并安装已下载的更新 */
+  installUpdate(): Promise<void>
+  onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
 
   listPosts(): Promise<PostMeta[]>
   readPost(id: string): Promise<Result<PostDetail>>

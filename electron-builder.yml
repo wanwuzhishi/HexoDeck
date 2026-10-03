@@ -22,8 +22,8 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: HexoDeck
   artifactName: ${productName}-Setup-${version}.${ext}
-# 自动更新预留：发布到 GitHub Releases 时取消注释并配置仓库，再接入 electron-updater
-# publish:
-#   provider: github
-#   owner: your-name
-#   repo: HexoDeck
+# 自动更新：GitHub Releases 作为更新源（electron-updater 读取打包产物中的 app-update.yml）
+publish:
+  provider: github
+  owner: wanwuzhishi
+  repo: HexoDeck

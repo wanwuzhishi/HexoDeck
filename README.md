@@ -34,6 +34,7 @@ Electron + Vue 3 + Naive UI · 双主题（深空霓虹 / 冰白清新）· 内�
 
 **应用**
 - 双主题：暗色（深空黑 + 霓虹青蓝 + 淡紫）/ 亮色（浅冰白 + 淡青蓝），玻璃拟态风格
+- 自动更新：启动时及每 6 小时检查 GitHub Releases，自动下载新版本，重启后生效（可在设置中关闭）
 - 可选关闭到系统托盘 + 单实例锁（重复启动唤回已开窗口）
 - 多站点管理：最近站点快速切换、移除
 - 运行日志落地到 `%APPDATA%/hexodeck/hexodeck.log`，应用设置页一键打开
@@ -67,6 +68,27 @@ npm run dev
 npm run build:unpack  # 生成 dist/win-unpacked 目录（快速验证）
 npm run build:win     # 生成 NSIS 安装包 + 绿色包 zip
 ```
+
+## 发布新版本（自动更新源）
+
+应用内置 [electron-updater](https://www.electron.build/auto-update)，以 GitHub Releases 为更新源：已安装用户启动时及每 6 小时自动检查，发现新版本自动下载、重启生效（可在 设置 → 应用 中关闭自动检查）。
+
+发版步骤：
+
+1. 更新版本号：`npm version patch`（或 minor / major）
+2. 打包：`npm run build:win`（`--publish never` 仅构建，不自动上传）
+3. 在 GitHub 创建对应 tag（如 `v0.1.1`）的 Release，上传以下资产：
+
+   | 资产 | 必需 | 用途 |
+   |---|---|---|
+   | `HexoDeck-Setup-X.Y.Z.exe` | ✅ | 安装包本体 |
+   | `HexoDeck-Setup-X.Y.Z.exe.blockmap` | ✅ | 增量更新（只下载变化部分） |
+   | `latest.yml` | ✅ | 更新检查入口（版本号与哈希清单） |
+   | `HexoDeck-X.Y.Z-win.zip` | 可选 | 绿色包 |
+
+4. 发布 Release 即完成，旧版本会自动发现更新
+
+> 注意：`latest.yml`、安装包、blockmap 必须来自同一次构建（sha512 校验需匹配）。
 
 ## 目录结构
 

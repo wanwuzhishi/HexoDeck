@@ -6,7 +6,8 @@ import type {
   DeployConfig,
   PostKind,
   PostPatch,
-  SiteConfigPatch
+  SiteConfigPatch,
+  UpdateStatus
 } from '../shared/ipc'
 
 const api: Api = {
@@ -21,6 +22,8 @@ const api: Api = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   saveAppSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('app:saveSettings', patch),
   openLogFolder: () => ipcRenderer.invoke('app:openLogs'),
+  checkForUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
+  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
 
   listPosts: () => ipcRenderer.invoke('post:list'),
   readPost: (id: string) => ipcRenderer.invoke('post:read', id),
@@ -62,6 +65,11 @@ const api: Api = {
     const handler = (): void => cb()
     ipcRenderer.on('evt:preview-stopped', handler)
     return () => ipcRenderer.removeListener('evt:preview-stopped', handler)
+  },
+  onUpdateStatus: (cb: (status: UpdateStatus) => void) => {
+    const handler = (_e: unknown, status: UpdateStatus): void => cb(status)
+    ipcRenderer.on('evt:update-status', handler)
+    return () => ipcRenderer.removeListener('evt:update-status', handler)
   },
 
   reportError: (message: string) => ipcRenderer.send('app:renderer-error', message)
