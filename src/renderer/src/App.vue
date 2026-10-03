@@ -69,7 +69,7 @@ onMounted(async () => {
             :value="activeKey"
             :options="menuOptions"
             :collapsed="ui.navCollapsed"
-            :collapsed-width="64"
+            :collapsed-width="48"
             :collapsed-icon-size="20"
             @update:value="onMenu"
           />
@@ -77,7 +77,7 @@ onMounted(async () => {
             <n-button
               quaternary
               circle
-              size="small"
+              :size="ui.navCollapsed ? 'tiny' : 'small'"
               :title="ui.isDark ? '切换到亮色主题' : '切换到暗色主题'"
               @click="ui.toggle"
             >
@@ -89,7 +89,7 @@ onMounted(async () => {
             <n-button
               quaternary
               circle
-              size="small"
+              :size="ui.navCollapsed ? 'tiny' : 'small'"
               :title="ui.navCollapsed ? '展开导航' : '折叠导航'"
               @click="ui.toggleNav"
             >
@@ -140,6 +140,12 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+/* 收起态：logo 居中 */
+.sider.collapsed .brand {
+  justify-content: center;
+  padding: 2px 0 14px;
+}
+
 .logo {
   width: 28px;
   height: 32px;
@@ -186,6 +192,11 @@ onMounted(async () => {
   gap: 6px;
   padding-top: 10px;
   border-top: 1px solid var(--glass-border);
+}
+
+/* 收起态：底部按钮居中 */
+.sider.collapsed .sider-foot {
+  justify-content: center;
 }
 
 .foot-site {
