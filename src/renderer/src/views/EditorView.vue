@@ -11,6 +11,7 @@ import {
   NTag
 } from 'naive-ui'
 import MarkdownIt from 'markdown-it'
+import { useSiteStore } from '../stores/site'
 import { usePostsStore } from '../stores/posts'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
@@ -22,6 +23,7 @@ import type { PostDetail } from '@shared/ipc'
 const route = useRoute()
 const router = useRouter()
 const posts = usePostsStore()
+const siteStore = useSiteStore()
 const ws = useWorkspaceStore()
 const ui = useUiStore()
 
@@ -62,11 +64,22 @@ function toFieldValue(v: unknown): string {
   return String(v)
 }
 
-/** 从 front-matter 提取自定义字段（排除内置项） */
+/**
+ * 从 front-matter 提取自定义字段（排除内置项）。
+ * 同时并入当前站点登记过的参数名：站点里定义过的参数是本篇没有值也会显示，
+ * 方便逐篇填写；未登记但本篇存在的字段同样保留。
+ */
 function extractCustomFields(fm: Record<string, unknown>): Array<{ key: string; value: string }> {
-  return Object.entries(fm)
+  const inFile = Object.entries(fm)
     .filter(([k]) => !BUILTIN_KEYS.includes(k))
     .map(([k, v]) => ({ key: k, value: toFieldValue(v) }))
+
+  const sitePath = siteStore.site?.path
+  const registered = sitePath ? (loadSiteFieldMap()[sitePath] ?? []) : []
+  const seen = new Set(inFile.map((f) => f.key))
+  const extra = registered.filter((k) => !seen.has(k)).map((k) => ({ key: k, value: '' }))
+
+  return [...inFile, ...extra]
 }
 
 /** 侧栏「其他元数据」：非自定义字段、非内置字段的只读展示（如 layout、comments） */
@@ -78,14 +91,70 @@ const readOnlyMeta = computed(() => {
     .map(([k, v]) => ({ key: k, value: toFieldValue(v) || '（空）' }))
 })
 
-function addCustomField(): void {
-  customFields.value.push({ key: '', value: '' })
-  // 空键不会写入文件（见 buildExtra），但要让脏检查认为无改动，
-  // 否则自动保存会立刻重载文件、把刚添加的空行冲掉
-  takeSnapshotOnly()
+/** 该站点已登记的自定义参数名（按站点路径绑定，切换站点各自独立） */
+const SITE_FIELDS_KEY = 'hexodeck-custom-fields'
+type SiteFieldMap = Record<string, string[]>
+
+function loadSiteFieldMap(): SiteFieldMap {
+  try {
+    return JSON.parse(localStorage.getItem(SITE_FIELDS_KEY) ?? '{}') as SiteFieldMap
+  } catch {
+    return {}
+  }
 }
 
-/** 仅刷新快照、不触发保存：用于新增空行这类本地编辑态变更 */
+function saveSiteFields(sitePath: string, keys: string[]): void {
+  const map = loadSiteFieldMap()
+  if (keys.length) map[sitePath] = keys
+  else delete map[sitePath]
+  localStorage.setItem(SITE_FIELDS_KEY, JSON.stringify(map))
+}
+
+/** 把当前参数名列表写回该站点的登记表 */
+function persistSiteFields(): void {
+  const sitePath = siteStore.site?.path
+  if (!sitePath) return
+  saveSiteFields(sitePath, customFields.value.map((f) => f.key).filter(Boolean))
+}
+
+/** 添加参数弹窗 */
+const showAddField = ref(false)
+const newFieldKey = ref('')
+const addFieldError = ref('')
+
+function openAddField(): void {
+  newFieldKey.value = ''
+  addFieldError.value = ''
+  showAddField.value = true
+}
+
+/** 参数名校验：合法 YAML 键、非内置字段、不重复 */
+const FIELD_NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]*$/
+
+function confirmAddField(): void {
+  const key = newFieldKey.value.trim()
+  if (!key) return
+  if (!FIELD_NAME_RE.test(key)) {
+    addFieldError.value = '参数名只能包含字母、数字、下划线和连字符，且不能以数字开头'
+    return
+  }
+  if (BUILTIN_KEYS.includes(key)) {
+    addFieldError.value = `${key} 是内置字段，无需添加`
+    return
+  }
+  if (customFields.value.some((f) => f.key === key)) {
+    addFieldError.value = `参数 ${key} 已存在`
+    return
+  }
+
+  // 参数值属于每篇文章各自的内容，这里只登记字段名，值留空由用户填写
+  customFields.value.push({ key, value: '' })
+  persistSiteFields()
+  takeSnapshotOnly()
+  showAddField.value = false
+}
+
+/** 仅刷新快照、不触发保存：用于新增空字段这类本地编辑态变更 */
 function takeSnapshotOnly(): void {
   snapshot.value = JSON.stringify([
     form.value.title,
@@ -98,8 +167,9 @@ function takeSnapshotOnly(): void {
 }
 
 function removeCustomField(i: number): void {
+  // 移除本篇文章的该字段，并从站点登记表删除（后续文章不再默认显示）
   customFields.value.splice(i, 1)
-  // 不在此处立即保存：等自动保存触发即可，避免保存后重载把其他编辑中的空行一并清掉
+  persistSiteFields()
 }
 
 /** 把自定义字段序列化为 extra 补丁；值为空串时表示删除该键 */
@@ -191,11 +261,9 @@ async function save(): Promise<void> {
       const fresh = await window.api.readPost(detail.value.id)
       if (fresh.ok && fresh.data) {
         detail.value = fresh.data
-        // 仅当没有待填写的空行时才用文件内容重建，避免把编辑中的新参数冲掉
-        const hasBlankRow = customFields.value.some((f) => !f.key.trim())
-        if (!hasBlankRow) {
-          customFields.value = extractCustomFields(fresh.data.frontMatter ?? {})
-        }
+        // 用文件内容 + 站点登记表重建（extractCustomFields 已自动并入登记字段），
+        // 不会再丢失用户登记的参数
+        customFields.value = extractCustomFields(fresh.data.frontMatter ?? {})
         takeSnapshot()
       }
       await posts.load()
@@ -310,7 +378,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
-      <div class="editor-body" :class="{ split: showPreview, 'with-params': showParams }">
+      <div class="editor-body" :class="{ row: showPreview || showParams }">
         <MarkdownEditor v-model="form.content" :dark="ui.isDark" />
         <div v-if="showPreview" class="markdown-body" v-html="previewHtml"></div>
 
@@ -351,34 +419,28 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="field-group">
-              <div class="field-label">
-                自定义参数
-                <n-button size="tiny" quaternary title="新增参数" @click="addCustomField">＋</n-button>
-              </div>
+              <div class="field-label">自定义参数</div>
               <div v-if="customFields.length" class="custom-list">
-                <div v-for="(f, i) in customFields" :key="i" class="custom-row">
-                  <n-input
-                    v-model:value="f.key"
-                    size="tiny"
-                    placeholder="键"
-                    class="custom-key"
-
-                  />
+                <div v-for="(f, i) in customFields" :key="f.key" class="custom-item">
+                  <div class="custom-head">
+                    <span class="custom-name" :title="f.key">{{ f.key }}</span>
+                    <n-button size="tiny" quaternary type="error" title="移除该参数" @click="removeCustomField(i)">
+                      移除
+                    </n-button>
+                  </div>
                   <n-input
                     v-model:value="f.value"
-                    size="tiny"
-                    placeholder="值"
-                    class="custom-value"
-
+                    size="small"
+                    type="textarea"
+                    :autosize="{ minRows: 1, maxRows: 4 }"
+                    :placeholder="`${f.key} 的值`"
                   />
-                  <n-button size="tiny" quaternary type="error" title="删除该参数" @click="removeCustomField(i)">
-                    ✕
-                  </n-button>
                 </div>
               </div>
-              <div v-else class="muted small">
-                可添加任意 front-matter 字段，如 <code>permalink</code>、<code>cover</code>、<code>sticky</code>
-              </div>
+              <div v-else class="muted small">尚未添加自定义参数</div>
+              <n-button size="small" block secondary class="add-param-btn" @click="openAddField">
+                ＋ 添加自定义参数
+              </n-button>
             </div>
 
             <div class="field-group">
@@ -398,6 +460,24 @@ onBeforeUnmount(() => {
           ‹
         </n-button>
       </div>
+
+    <n-modal v-model:show="showAddField" preset="card" title="添加自定义参数" style="width: 420px">
+      <div class="muted small" style="margin-bottom: 10px">
+        参数名即 front-matter 的键名，如 <code>permalink</code>、<code>cover</code>、<code>sticky</code>、<code>comments</code>。
+      </div>
+      <n-input
+        v-model:value="newFieldKey"
+        placeholder="参数名称（英文键名）"
+        @keyup.enter="confirmAddField"
+      />
+      <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showAddField = false">取消</n-button>
+          <n-button type="primary" :disabled="!newFieldKey.trim()" @click="confirmAddField">添加</n-button>
+        </n-space>
+      </template>
+    </n-modal>
 
     <div class="status-bar">
       <span>{{ liveWordCount }} 字</span>
@@ -447,7 +527,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
 }
-.editor-body.split {
+/* 横向布局：预览或参数侧栏任一开启时生效（侧栏位置不再受预览开关影响） */
+.editor-body.row {
   flex-direction: row;
   gap: 14px;
 }
