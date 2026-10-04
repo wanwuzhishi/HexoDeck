@@ -14,7 +14,14 @@ import {
   savePost,
   searchPosts
 } from '../src/main/services/post-service'
-import { saveImage } from '../src/main/services/asset-service'
+import { clearSiteIcon, findSiteIcon, saveImage, saveSiteIcon } from '../src/main/services/asset-service'
+import {
+  createPage,
+  deletePage,
+  listPages,
+  readPage,
+  savePage
+} from '../src/main/services/page-service'
 import {
   defaultThemeConfigPath,
   listPlugins,
@@ -24,12 +31,14 @@ import {
   saveBaseConfig,
   saveDeployConfig,
   saveThemeConfig,
-  switchTheme
+  switchTheme,
+  validateDeployConfig
 } from '../src/main/services/site-config-service'
 import {
   findFreePort,
   runHexoBuild,
   startHexoServer,
+  detectDeployFailure,
   type ChildBase
 } from '../src/main/services/hexo-process-service'
 
@@ -197,6 +206,145 @@ async function main(): Promise<void> {
   const cfGuard = await readPost(tmpSite, cf.id)
   check('内置字段不被自定义参数覆盖', cfGuard.title === '自定义字段测试', cfGuard.title)
   await deletePost(tmpSite, cf.id, async () => { throw new Error('no trash') })
+
+  // 10.5 页面（source/ 下非文章目录的 markdown）
+  const page = await createPage(tmpSite, {
+    title: '关于',
+    path: 'about/index',
+    frontMatterYaml: 'layout: page\ncomments: false\n'
+  })
+  check('页面创建到子目录', page.id === 'about/index.md', page.id)
+  const pageDetail = await readPage(tmpSite, 'about/index.md')
+  check(
+    '页面初始参数写入',
+    pageDetail.frontMatter.layout === 'page' && pageDetail.frontMatter.comments === false,
+    JSON.stringify(pageDetail.frontMatter)
+  )
+  check('页面内置 title 生效', pageDetail.title === '关于', pageDetail.title)
+
+  await savePage(tmpSite, page.id, {
+    content: '# 关于本站\n\n这里是 HexoDeck 冒烟测试页面。',
+    extra: { permalink: 'about-me', comments: null }
+  })
+  const pageAgain = await readPage(tmpSite, page.id)
+  check('页面正文与参数保存', pageAgain.content.includes('关于本站'))
+  check('页面参数新增并回读', pageAgain.frontMatter.permalink === 'about-me')
+  check('页面参数传 null 可删除', !('comments' in pageAgain.frontMatter))
+
+  const pageList = await listPages(tmpSite)
+  check('页面列表含新建页面', pageList.some((p) => p.id === 'about/index.md'))
+  check(
+    '页面列表排除文章目录',
+    !pageList.some((p) => p.id.startsWith('_posts/') || p.id.startsWith('_drafts/')),
+    pageList.map((p) => p.id).join(', ')
+  )
+
+  // 路径穿越必须被拦住，否则能读写到站点之外
+  check(
+    '页面路径穿越被拒绝',
+    await readPage(tmpSite, '../_config.yml').then(() => false).catch(() => true)
+  )
+  check(
+    '非 md 页面被拒绝',
+    await readPage(tmpSite, 'about/index.html').then(() => false).catch(() => true)
+  )
+  check(
+    '重复页面被拒绝',
+    await createPage(tmpSite, { title: '关于2', path: 'about/index' })
+      .then(() => false)
+      .catch(() => true)
+  )
+  // 新建时的 YAML 语法错误应直接报错，不落盘
+  check(
+    '页面参数 YAML 错误被拒绝',
+    await createPage(tmpSite, { title: '坏页面', path: 'bad', frontMatterYaml: '{ 未闭合' })
+      .then(() => false)
+      .catch(() => true)
+  )
+
+  await deletePage(tmpSite, page.id, async () => { throw new Error('no trash') })
+  check('页面删除后从列表消失', !(await listPages(tmpSite)).some((p) => p.id === page.id))
+
+  // 10.6 站点图标（写入 source/，随站点走）
+  const icoBase64 = Buffer.from('fake-ico-bytes').toString('base64')
+  const iconPath = await saveSiteIcon(tmpSite, 'my-icon.ico', icoBase64)
+  check('站点图标写入 source/favicon.ico', iconPath === join(tmpSite, 'source', 'favicon.ico'), iconPath)
+  check('站点图标可被识别', findSiteIcon(tmpSite) === iconPath)
+  const infoWithIcon = await openSite(tmpSite)
+  check('站点信息带图标地址', !!infoWithIcon.iconUrl && !!infoWithIcon.iconPath)
+
+  // 换格式时旧变体应被清理，避免同时存在多个 favicon
+  await saveSiteIcon(tmpSite, 'logo.png', icoBase64)
+  check('换格式后旧图标被清理', !(await fs.stat(iconPath).catch(() => null)))
+  check('新图标已就位', findSiteIcon(tmpSite) === join(tmpSite, 'source', 'favicon.png'))
+
+  await clearSiteIcon(tmpSite)
+  check('图标可清除', findSiteIcon(tmpSite) === null)
+  check('无图标时站点信息不含图标', !(await openSite(tmpSite)).iconUrl)
+
+  check(
+    '非图片格式图标被拒绝',
+    await saveSiteIcon(tmpSite, 'evil.exe', icoBase64).then(() => false).catch(() => true)
+  )
+
+  await fs.rm(tmpParent, { recursive: true, force: true })
+
+  // 10.7 部署失败识别与配置预检
+  // hexo 的 deployer 用 spawn(stdio:'inherit') 调 git，push 失败不改变退出码，
+  // 若不识别输出就会误报「部署完成」（真实事故：branch 为空时推送失败但提示成功）
+  check(
+    '空 branch 的非法 push 被识别',
+    !!detectDeployFailure(
+      'fatal: The current branch master has no upstream branch\nTo push the current branch'
+    )
+  )
+  check(
+    '仓库不存在被识别',
+    !!detectDeployFailure("remote: Repository not found.\nfatal: repository 'https://x/y' not found")
+  )
+  check('认证失败被识别', !!detectDeployFailure('fatal: Authentication failed for https://x/y'))
+  check('推送被拒绝被识别', !!detectDeployFailure('error: failed to push some refs to https://x/y'))
+  check('插件缺失被识别', !!detectDeployFailure('ERROR Deployer not found: git'))
+  check('正常输出不误报失败', !detectDeployFailure('INFO  Deploy done: git\nINFO  Files loaded'))
+
+  const deployCfgSite = await createSite('deploy-check', tmpParent)
+  // 空 branch：必须拦下并给出可操作提示
+  await saveDeployConfig(deployCfgSite, {
+    type: 'git',
+    repo: 'https://github.com/u/u.github.io.git',
+    branch: ''
+  })
+  const emptyBranchIssue = await validateDeployConfig(deployCfgSite)
+  check('部署预检拦截空 branch', !!emptyBranchIssue && /branch/.test(emptyBranchIssue), emptyBranchIssue)
+
+  // 地址缺 .git 后缀：给出建议
+  await saveDeployConfig(deployCfgSite, {
+    type: 'git',
+    repo: 'https://github.com/u/u.github.io',
+    branch: 'main'
+  })
+  const noSuffixIssue = await validateDeployConfig(deployCfgSite)
+  check('部署预检提示补 .git 后缀', !!noSuffixIssue && /\.git/.test(noSuffixIssue), noSuffixIssue)
+
+  // GitHub Pages 主仓库名形如 <user>.github.io，含点号，不能被误判
+  await saveDeployConfig(deployCfgSite, {
+    type: 'git',
+    repo: 'https://github.com/u/u.github.io.git',
+    branch: 'main'
+  })
+  check('含点的 <user>.github.io 仓库名不误报', (await validateDeployConfig(deployCfgSite)) === undefined)
+
+  // 配置完整时不应报问题
+  await saveDeployConfig(deployCfgSite, {
+    type: 'git',
+    repo: 'https://github.com/u/u.github.io.git',
+    branch: 'main'
+  })
+  check('部署配置完整时预检通过', (await validateDeployConfig(deployCfgSite)) === undefined)
+
+  // 未配置部署方式
+  await saveDeployConfig(deployCfgSite, { type: '', repo: '', branch: '' })
+  check('未配置部署方式被预检拦截', !!(await validateDeployConfig(deployCfgSite)))
   await fs.rm(tmpParent, { recursive: true, force: true })
 
   // 7. 生成静态页面（增量构建：无变更时输出 0 个文件，属正常）

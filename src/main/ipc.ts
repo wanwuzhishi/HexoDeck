@@ -1,12 +1,14 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { existsSync } from 'fs'
-import { appendFile } from 'fs/promises'
+import { appendFile, readFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import type {
   AppSettings,
   BuildCommand,
   ConfigPathInfo,
   ConfigPathKind,
+  PageCreateOptions,
+  PagePatch,
   PostKind,
   PostPatch,
   Result,
@@ -23,10 +25,7 @@ import {
   setAutoCheck,
   setUpdateEmitter
 } from './services/updater'
-import {
-  createSite,
-  openSite as openSiteInfo
-} from './services/site-service'
+import { createSite, openSite as openSiteInfo } from './services/site-service'
 import {
   createPost,
   deletePost,
@@ -36,7 +35,14 @@ import {
   savePost,
   searchPosts
 } from './services/post-service'
-import { saveImage } from './services/asset-service'
+import {
+  createPage,
+  deletePage,
+  listPages,
+  readPage,
+  savePage
+} from './services/page-service'
+import { clearSiteIcon, saveImage, saveSiteIcon } from './services/asset-service'
 import { installThemeFromArchive, isArchive } from './services/theme-archive-service'
 import { collectStats } from './services/stats-service'
 import {
@@ -50,7 +56,8 @@ import {
   saveDeployConfig,
   saveRawConfig,
   saveThemeConfig,
-  switchTheme
+  switchTheme,
+  validateDeployConfig
 } from './services/site-config-service'
 import type { BasePatch } from './services/site-config-service'
 import {
@@ -222,6 +229,99 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('post:list', async () => (currentSite ? listPosts(currentSite) : []))
 
+  // ---- 站点图标：图片写入站点 source/，随站点走（Hexo 生成时网站也会用上） ----
+
+  /** 保存图标后返回带最新 iconUrl 的站点信息，供界面立即刷新 */
+  const siteInfoWithIcon = async (dir: string): Promise<SiteInfo> => {
+    const info = await openSiteInfo(dir)
+    void logLine(info.iconPath ? `站点图标已更新：${info.iconPath}` : '站点图标已移除')
+    return info
+  }
+
+  ipcMain.handle('site:pickIcon', async (): Promise<Result<SiteInfo>> => {
+    try {
+      const site = requireSite()
+      const picked = await dialog.showOpenDialog({
+        title: '选择站点图标（favicon）',
+        filters: [
+          { name: '图片', extensions: ['ico', 'png', 'jpg', 'jpeg', 'svg', 'webp', 'gif', 'bmp'] }
+        ],
+        properties: ['openFile']
+      })
+      if (picked.canceled || picked.filePaths.length === 0) return { ok: false, error: 'canceled' }
+      const file = picked.filePaths[0]
+      const base64 = (await readFile(file)).toString('base64')
+      await saveSiteIcon(site, file, base64)
+      return okResult(await siteInfoWithIcon(site))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle(
+    'site:setIcon',
+    async (_e, fileName: string, base64: string): Promise<Result<SiteInfo>> => {
+      try {
+        const site = requireSite()
+        await saveSiteIcon(site, fileName, base64)
+        return okResult(await siteInfoWithIcon(site))
+      } catch (e) {
+        return { ok: false, error: (e as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle('site:clearIcon', async (): Promise<Result<SiteInfo>> => {
+    try {
+      const site = requireSite()
+      await clearSiteIcon(site)
+      return okResult(await siteInfoWithIcon(site))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  // ---- 页面（source/ 下非文章目录的 markdown） ----
+
+  ipcMain.handle('page:list', async () => (currentSite ? listPages(currentSite) : []))
+
+  ipcMain.handle('page:read', async (_e, id: string) => {
+    try {
+      return okResult(await readPage(requireSite(), id))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('page:create', async (_e, options: PageCreateOptions) => {
+    try {
+      const meta = await createPage(requireSite(), options)
+      onLog(`✓ 页面已创建：source/${meta.id}`)
+      return okResult(meta)
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('page:save', async (_e, id: string, patch: PagePatch): Promise<Result> => {
+    try {
+      await savePage(requireSite(), id, patch)
+      return okResult()
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('page:delete', async (_e, id: string): Promise<Result> => {
+    try {
+      const site = requireSite()
+      await deletePage(site, id, (p) => shell.trashItem(p))
+      return okResult()
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
   ipcMain.handle('post:read', async (_e, id: string) => {
     try {
       return okResult(await readPost(requireSite(), id))
@@ -291,7 +391,23 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('build:run', async (_e, command: BuildCommand) => {
     try {
-      const result = await runHexoBuild(ctx.childBase, requireSite(), command, onLog)
+      const site = requireSite()
+      // 部署前必须先按当前源码生成静态页面，否则推送的是上一次 generate 的旧产物
+      if (command === 'deploy') {
+        const issue = await validateDeployConfig(site)
+        if (issue) {
+          onLog(`✗ ${issue}`)
+          return { ok: false, command, durationMs: 0, error: issue }
+        }
+        onLog('— 部署前先执行 hexo generate（确保推送最新内容）—')
+        const gen = await runHexoBuild(ctx.childBase, site, 'generate', onLog)
+        if (!gen.ok) {
+          const msg = `生成静态页面失败，已中止部署：${gen.error ?? '未知错误'}`
+          onLog(`✗ ${msg}`)
+          return { ok: false, command, durationMs: gen.durationMs, error: msg }
+        }
+      }
+      const result = await runHexoBuild(ctx.childBase, site, command, onLog)
       void logLine(`构建 ${command}: ${result.ok ? '成功' : '失败'}（${result.durationMs}ms）`)
       return result
     } catch (e) {

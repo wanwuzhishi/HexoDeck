@@ -152,6 +152,29 @@ export async function readSiteConfig(siteDir: string): Promise<SiteConfigForm> {
   return toForm(data)
 }
 
+/**
+ * 部署配置预检：hexo-deployer-git 在 branch 为空时会执行 `git push <repo> HEAD:`
+ * （非法 ref）导致推送失败，但 hexo 不上报非零退出码，界面会误报成功。
+ * 这里在部署前拦下来，给出可操作的提示。
+ */
+export async function validateDeployConfig(siteDir: string): Promise<string | undefined> {
+  const cfg = await readSiteConfig(siteDir)
+  const d = cfg.deploy
+  if (!d.type) return '尚未配置部署方式（设置 → 部署）'
+  if (d.type !== 'git') return undefined
+
+  if (!d.repo.trim()) return '尚未填写仓库地址（设置 → 部署）'
+  if (!d.branch.trim()) {
+    return 'deploy.branch 为空，git 推送会失败。请在「设置 → 部署」填写分支（GitHub Pages 通常为 main）'
+  }
+  // 常见误配：GitHub 仓库地址缺 .git 后缀时，部分场景下会被当成路径而非仓库
+  // 注意仓库名本身可含点（如 u.github.io），只看结尾是否有 .git
+  if (/^https?:\/\/github\.com\/[^/]+\/.+$/.test(d.repo.trim()) && !/\.git$/.test(d.repo.trim())) {
+    return `仓库地址建议以 .git 结尾（当前：${d.repo}），否则可能无法识别为 Git 仓库`
+  }
+  return undefined
+}
+
 /** 高级：读取配置文件原文（路径由用户指定并记忆，由 ipc 层解析） */
 export async function readRawConfig(path: string): Promise<{ path: string; content: string }> {
   return { path, content: await fs.readFile(path, 'utf8') }
