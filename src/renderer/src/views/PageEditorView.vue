@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NDatePicker, NIcon, NInput, NPopconfirm, NSpace, NTag } from 'naive-ui'
+import { NButton, NIcon, NPopconfirm, NSpace, NTag } from 'naive-ui'
 import { ChevronBackOutline } from '@vicons/ionicons5'
 import MarkdownIt from 'markdown-it'
 import { useSiteStore } from '../stores/site'
@@ -10,8 +10,9 @@ import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
 import { countWords } from '../composables/wordcount'
-import { FIELD_NAME_RE, useCustomFields } from '../composables/customFields'
+import { load as loadYaml } from 'js-yaml'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import CodeEditor from '../components/CodeEditor.vue'
 import type { PageDetail } from '@shared/ipc'
 
 const route = useRoute()
@@ -39,66 +40,97 @@ function togglePreview(): void {
   localStorage.setItem(PREVIEW_KEY, showPreview.value ? '1' : '0')
 }
 
-/** 参数侧栏默认关闭，点击顶部按钮展开；选择按站点记忆 */
-const PARAMS_KEY = 'hexodeck-editor-params'
-const showParams = ref(localStorage.getItem(PARAMS_KEY) === '1')
+/**
+ * 参数侧栏默认关闭：每次打开页面编辑器都从收起状态开始。
+ * 刻意不做持久化——展开参数是临时查看动作，记住它反而让每次进来都要手动收一次。
+ */
+const showParams = ref(false)
 
 function toggleParams(): void {
   showParams.value = !showParams.value
-  localStorage.setItem(PARAMS_KEY, showParams.value ? '1' : '0')
 }
 
-// ---------- 页面参数：与文章编辑器共用同一套「参数名 + 值」卡片逻辑 ----------
+// ---------- 页面参数：YAML 大输入框 ----------
 
-/** 页面的内置字段（由上方表单维护，不计入自定义参数） */
-const BUILTIN_KEYS = ['title', 'date']
+/**
+ * 大框内容：完整 front-matter 的 YAML 原文（含 title / date）。
+ * 页面编辑器不再单独提供标题、日期输入框——同一份数据只在一处可编辑，
+ * 避免两处不同步；顶部只读展示当前标题与日期作为身份提示。
+ */
+const paramsYaml = ref('')
 
-const {
-  customFields,
-  fieldLabel,
-  applyFrom,
-  add: addField,
-  remove: removeField,
-  buildExtra,
-  readOnlyMeta,
-  setFrontMatter
-} = useCustomFields({ builtinKeys: BUILTIN_KEYS, onSnapshot: () => takeSnapshot() })
-
-/** 添加参数弹窗 */
-const showAddField = ref(false)
-const newFieldKey = ref('')
-const newFieldLabel = ref('')
-const addFieldError = ref('')
-
-function openAddField(): void {
-  newFieldKey.value = ''
-  newFieldLabel.value = ''
-  addFieldError.value = ''
-  showAddField.value = true
-}
-
-function confirmAddField(): void {
-  const key = newFieldKey.value.trim()
-  if (!key) return
-  if (!FIELD_NAME_RE.test(key)) {
-    addFieldError.value = '参数名只能包含字母、数字、下划线和连字符，且不能以数字开头'
-    return
+/**
+ * 轻量 YAML 序列化：只处理标量/数组/普通对象（front-matter 的常见形态）。
+ * 不用 js-yaml 的 dump 是为了避免它给长字符串加折行、给日期加引号等噪音。
+ */
+function dumpYaml(obj: Record<string, unknown>, indent = 0): string {
+  const pad = '  '.repeat(indent)
+  const lines: string[] = []
+  for (const [k, v] of Object.entries(obj)) {
+    if (v == null) {
+      lines.push(`${pad}${k}:`)
+    } else if (Array.isArray(v)) {
+      if (!v.length) lines.push(`${pad}${k}: []`)
+      else {
+        lines.push(`${pad}${k}:`)
+        for (const item of v) lines.push(`${pad}  - ${scalarText(item)}`)
+      }
+    } else if (typeof v === 'object') {
+      lines.push(`${pad}${k}:`)
+      lines.push(dumpYaml(v as Record<string, unknown>, indent + 1))
+    } else {
+      lines.push(`${pad}${k}: ${scalarText(v)}`)
+    }
   }
-  if (BUILTIN_KEYS.includes(key)) {
-    addFieldError.value = `${key} 是内置字段，无需添加`
-    return
-  }
-  if (customFields.value.some((f) => f.key === key)) {
-    addFieldError.value = `参数 ${key} 已存在`
-    return
-  }
-  addField(key, newFieldLabel.value.trim())
-  showAddField.value = false
+  return lines.join('\n')
 }
 
-function removeCustomField(i: number): void {
-  removeField(i)
+function scalarText(v: unknown): string {
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  const s = String(v)
+  if (s === '') return "''"
+  if (/^[\w./:@^~+%=-]+$/.test(s)) return s
+  return JSON.stringify(s)
 }
+
+/** 把完整 front-matter 回填到大框 */
+function frontMatterToYaml(fm: Record<string, unknown>): string {
+  if (!Object.keys(fm).length) return ''
+  return dumpYaml(fm)
+}
+
+/** 大框的实时校验结果 */
+const paramsError = computed(() => {
+  const text = paramsYaml.value.trim()
+  if (!text) return ''
+  try {
+    const parsed = loadYaml(text, { json: true })
+    if (parsed != null && (typeof parsed !== 'object' || Array.isArray(parsed))) {
+      return '参数需要是键值对形式，例如 layout: page'
+    }
+  } catch (e) {
+    return `YAML 语法错误：${(e as Error).message.split('\n')[0]}`
+  }
+  return ''
+})
+
+/** 解析大框为参数对象；非法时返回 null */
+function parseParams(): Record<string, unknown> | null {
+  const text = paramsYaml.value.trim()
+  if (!text) return {}
+  try {
+    const parsed = loadYaml(text, { json: true })
+    if (parsed == null) return {}
+    if (typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    return parsed as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+/** 顶部只读展示：大框里的标题/日期，未填时回退到原值 */
+const previewTitle = computed(() => String(parseParams()?.title ?? detail.value?.title ?? ''))
+const previewDate = computed(() => String(parseParams()?.date ?? detail.value?.date ?? ''))
 
 const liveWordCount = computed(() => countWords(form.value.content))
 
@@ -108,14 +140,13 @@ const previewHtml = computed(() => {
 })
 
 function takeSnapshot(): void {
-  snapshot.value = JSON.stringify([form.value.title, form.value.date, form.value.content, customFields.value])
+  snapshot.value = JSON.stringify([form.value.content, paramsYaml.value])
 }
 
 const dirty = computed(
   () =>
     detail.value !== null &&
-    JSON.stringify([form.value.title, form.value.date, form.value.content, customFields.value]) !==
-      snapshot.value
+    JSON.stringify([form.value.content, paramsYaml.value]) !== snapshot.value
 )
 
 async function load(): Promise<void> {
@@ -124,13 +155,13 @@ async function load(): Promise<void> {
   if (r.ok && r.data) {
     detail.value = r.data
     form.value = {
+      // 标题/日期不再单独编辑，但保留一份用于只读展示与标题兜底
       title: r.data.title,
       date: r.data.date,
       // CodeMirror 以 LF 为行分隔符，统一后再比较，避免 CRLF 文件被误判为已修改
       content: r.data.content.replace(/\r\n/g, '\n')
     }
-    setFrontMatter(r.data.frontMatter ?? {})
-    applyFrom(r.data.frontMatter ?? {})
+    paramsYaml.value = frontMatterToYaml(r.data.frontMatter ?? {})
     takeSnapshot()
   } else {
     message.error(r.error ?? '读取页面失败')
@@ -140,14 +171,34 @@ async function load(): Promise<void> {
 
 async function save(): Promise<void> {
   if (!detail.value || saving.value) return
+  if (paramsError.value) {
+    message.error('参数 YAML 有语法错误，请先修正')
+    return
+  }
+  const parsed = parseParams()
+  if (!parsed) {
+    message.error('参数需要是键值对形式')
+    return
+  }
+
   saving.value = true
   try {
+    // front-matter 全量走 extra（大框是标题/日期的唯一编辑处）；
+    // 数组/对象转为文本以匹配 extra 的字符串契约
+    const extra: Record<string, string | null> = {}
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v == null || v === '') extra[k] = null
+      else if (Array.isArray(v)) extra[k] = v.map(String).join(', ')
+      else if (typeof v === 'object') extra[k] = JSON.stringify(v)
+      else extra[k] = String(v)
+    }
+
     // 注意：form 是响应式 Proxy，直接传对象给 IPC 会因结构化克隆失败
     const r = await window.api.savePage(detail.value.id, {
-      title: form.value.title,
-      date: form.value.date,
+      title: previewTitle.value,
+      date: previewDate.value,
       content: form.value.content,
-      extra: { ...buildExtra() }
+      extra: { ...extra }
     })
     if (r.ok) {
       takeSnapshot()
@@ -158,8 +209,7 @@ async function save(): Promise<void> {
         detail.value = fresh.data
         form.value.title = fresh.data.title
         form.value.date = fresh.data.date
-        setFrontMatter(fresh.data.frontMatter ?? {})
-        applyFrom(fresh.data.frontMatter ?? {})
+        paramsYaml.value = frontMatterToYaml(fresh.data.frontMatter ?? {})
         takeSnapshot()
       }
       await pages.load()
@@ -171,15 +221,15 @@ async function save(): Promise<void> {
   }
 }
 
-// 自动保存：停止输入后按设置延迟静默保存
+// 自动保存：停止输入后按设置延迟静默保存；YAML 有语法错误时暂停
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 watch(
-  [form, customFields],
+  [form, paramsYaml],
   () => {
-    if (!detail.value || !dirty.value) return
+    if (!detail.value || !dirty.value || paramsError.value) return
     if (autoSaveTimer) clearTimeout(autoSaveTimer)
     autoSaveTimer = setTimeout(() => {
-      if (dirty.value) save()
+      if (dirty.value && !paramsError.value) save()
     }, ui.autoSaveDelay)
   },
   { deep: true }
@@ -212,6 +262,8 @@ watch(
     if (!old || path === old) return
     detail.value = null
     form.value = { title: '', date: '', content: '' }
+    // 大框内容也属于旧站点，必须一并清空，否则会串到新站点
+    paramsYaml.value = ''
     snapshot.value = ''
     router.replace('/pages')
   }
@@ -268,16 +320,10 @@ onBeforeUnmount(() => {
       </n-space>
     </div>
 
+    <!-- 标题与日期在右侧参数大框里编辑，这里只读展示，避免两处输入不同步 -->
     <div class="meta-row">
-      <n-input v-model:value="form.title" placeholder="标题" class="title-input" />
-      <n-date-picker
-        :formatted-value="form.date || null"
-        type="datetime"
-        format="yyyy-MM-dd HH:mm:ss"
-        placeholder="日期"
-        class="date-picker"
-        @update:formatted-value="(v: string | null) => (form.date = v ?? '')"
-      />
+      <span class="page-title" :title="previewTitle">{{ previewTitle || '（未设置标题）' }}</span>
+      <span v-if="previewDate" class="muted small page-date">{{ previewDate }}</span>
       <span v-if="detail" class="muted small page-path" :title="detail.id">source/{{ detail.id }}</span>
     </div>
 
@@ -285,7 +331,7 @@ onBeforeUnmount(() => {
       <MarkdownEditor v-model="form.content" :dark="ui.isDark" />
       <div v-if="showPreview" class="markdown-body" v-html="previewHtml"></div>
 
-      <!-- 页面参数侧栏：与文章编辑器一致的「参数名 + 值」卡片 -->
+      <!-- 页面参数侧栏：YAML 大输入框（不含标题 / 时间） -->
       <aside v-if="showParams" class="params-rail glass">
         <div class="params-head">
           <span class="params-title">页面参数</span>
@@ -294,39 +340,15 @@ onBeforeUnmount(() => {
 
         <div class="params-scroll">
           <div class="field-group">
-            <div class="field-label">自定义参数</div>
-            <div v-if="customFields.length" class="custom-list">
-              <div v-for="(f, i) in customFields" :key="f.key" class="custom-item">
-                <div class="custom-head">
-                  <span class="custom-name" :title="f.key">{{ fieldLabel(f.key) }}</span>
-                  <n-button size="tiny" quaternary type="error" title="移除该参数" @click="removeCustomField(i)">
-                    移除
-                  </n-button>
-                </div>
-                <n-input
-                  v-model:value="f.value"
-                  size="small"
-                  type="textarea"
-                  :autosize="{ minRows: 1, maxRows: 4 }"
-                  :placeholder="`${fieldLabel(f.key)} 的值`"
-                />
-              </div>
+            <div class="field-label">页面参数（YAML）</div>
+            <div class="muted small yaml-tip">
+              直接写完整的 front-matter 键值对（含 <code>title</code>、<code>date</code>），保存时写回文件。
             </div>
-            <div v-else class="muted small">尚未添加自定义参数</div>
-            <n-button size="small" block secondary class="add-param-btn" @click="openAddField">
-              ＋ 添加自定义参数
-            </n-button>
-          </div>
-
-          <div class="field-group">
-            <div class="field-label">其他元数据</div>
-            <div class="meta-list">
-              <div v-for="m in readOnlyMeta" :key="m.key" class="meta-row-item">
-                <span class="meta-key" :title="m.key">{{ m.key }}</span>
-                <span class="meta-val" :title="m.value">{{ m.value }}</span>
-              </div>
-              <div v-if="!readOnlyMeta.length" class="muted small">无</div>
+            <div class="code-editor-wrap param-editor" :class="{ invalid: !!paramsError }">
+              <CodeEditor v-model="paramsYaml" :dark="ui.isDark" placeholder="layout: page" />
             </div>
+            <div v-if="paramsError" class="param-error">{{ paramsError }}</div>
+            <div v-else class="param-ok">✓ YAML 格式正确</div>
           </div>
         </div>
       </aside>
@@ -344,32 +366,10 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <n-modal v-model:show="showAddField" preset="card" title="添加自定义参数" style="width: 420px">
-      <div class="muted small" style="margin-bottom: 10px">
-        参数名即 front-matter 的键名，如 <code>permalink</code>、<code>layout</code>、<code>comments</code>。
-      </div>
-      <div class="field-inputs">
-        <div class="field-col">
-          <div class="field-col-label">中文显示名 <span class="muted small">（可选）</span></div>
-          <n-input v-model:value="newFieldLabel" placeholder="如 布局" @keyup.enter="confirmAddField" />
-        </div>
-        <div class="field-col">
-          <div class="field-col-label">英文键名 <span class="muted small">（必填）</span></div>
-          <n-input v-model:value="newFieldKey" placeholder="如 layout" @keyup.enter="confirmAddField" />
-        </div>
-      </div>
-      <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showAddField = false">取消</n-button>
-          <n-button type="primary" :disabled="!newFieldKey.trim()" @click="confirmAddField">添加</n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
     <div class="status-bar">
       <span>{{ liveWordCount }} 字</span>
-      <span v-if="dirty">· 有未保存修改（{{ autoSaveSeconds }}s 后自动保存）</span>
+      <span v-if="dirty && !paramsError">· 有未保存修改（{{ autoSaveSeconds }}s 后自动保存）</span>
+      <span v-else-if="paramsError" class="err">· 参数有语法错误，已暂停自动保存</span>
       <span v-else-if="lastSavedAt">· 已保存于 {{ lastSavedAt }}</span>
       <span v-if="ws.previewUrl" class="hint">· 站内图片已映射到预览服务</span>
     </div>
@@ -404,20 +404,27 @@ onBeforeUnmount(() => {
   color: var(--text-1);
 }
 
+/* 只读身份行：标题与日期由右侧参数大框维护，这里仅作展示 */
 .meta-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 10px;
-}
-
-.title-input {
-  flex: 1;
   min-width: 0;
 }
 
-.date-picker {
-  width: 210px;
+.page-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.page-date {
   flex: none;
+  font-family: var(--mono);
 }
 
 .page-path {
@@ -547,135 +554,7 @@ onBeforeUnmount(() => {
   color: var(--ok);
 }
 
-.effective-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-}
-
-.meta-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.meta-row-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: var(--accent-soft);
-}
-
-.meta-key {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-2);
-  flex: none;
-}
-
-.meta-val {
-  font-size: 12px;
-  color: var(--text-1);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* 收起态：贴边竖向拉手，悬停点亮，明确可点击 */
-.custom-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.custom-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 8px 10px;
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
-  background: var(--accent-soft);
-}
-
-.custom-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.custom-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-1);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.add-param-btn {
-  margin-top: 8px;
-}
-
-/* 添加参数弹窗：中文显示名（左）/ 英文键名（右） */
-.field-inputs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.field-col {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.field-col-label {
-  font-size: 12px;
-  color: var(--text-1);
-}
-
-.add-field-error {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--danger);
-}
-
-.meta-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.meta-row-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  padding: 3px 6px;
-  border-radius: 6px;
-  background: var(--accent-soft);
-}
-
-.meta-key {
-  font-family: var(--mono);
-  color: var(--accent);
-  flex: none;
-}
-
-.meta-val {
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .params-open {
   flex: none;
   align-self: stretch;

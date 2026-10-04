@@ -46,13 +46,14 @@ function togglePreview(): void {
   localStorage.setItem(PREVIEW_KEY, showPreview.value ? '1' : '0')
 }
 
-/** 参数侧栏默认关闭，点击顶部按钮展开；选择按站点记忆 */
-const PARAMS_KEY = 'hexodeck-editor-params'
-const showParams = ref(localStorage.getItem(PARAMS_KEY) === '1')
+/**
+ * 参数侧栏默认关闭：每次打开文章编辑器都从收起状态开始。
+ * 刻意不做持久化——展开参数是临时查看动作，记住它反而让每次进来都要手动收一次。
+ */
+const showParams = ref(false)
 
 function toggleParams(): void {
   showParams.value = !showParams.value
-  localStorage.setItem(PARAMS_KEY, showParams.value ? '1' : '0')
 }
 
 /** 自定义 front-matter 字段（不含内置的 title/date/tags/categories）。
