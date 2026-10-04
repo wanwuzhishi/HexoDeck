@@ -24,7 +24,7 @@ Electron + Vue 3 + Naive UI · 双主题（深空霓虹 / 冰白清新）· 内�
 **页面**
 - 独立管理 `source/` 下的页面（如 `about/index.md`），支持子目录；文章目录自动排除
 - 新建页面可填标题、路径（如 `about/index`）与初始参数
-- 页面编辑器：分栏预览、自动保存、Ctrl+S、站点切换守卫；front-matter 以 **YAML 输入框**直接编辑（含标题/日期，实时语法校验），顶部只读展示当前标题与路径
+- 页面编辑器：分栏预览、自动保存、Ctrl+S、站点切换守卫；front-matter 以 **YAML 输入框**直接编辑（含标题/日期，实时语法校验），顶部只读展示当前标题、日期与路径
 
 **站点配置**
 - 基础配置表单（标题 / 作者 / 语言 / URL / 永久链接 / 分页等），首次保存自动备份 `_config.yml.hexodeck.bak`，注释与键顺序完整保留；**站点图标**可在此设置（也可在站点页点头像或拖拽图片）
@@ -52,7 +52,7 @@ Electron + Vue 3 + Naive UI · 双主题（深空霓虹 / 冰白清新）· 内�
 - 多站点管理：**添加站点**选择已安装 Hexo 的博客文件夹；**切换站点**在弹出的已添加列表里点击站点卡片即切换（右栏站点卡片、站点页均可），支持移除
 - **自定义站点图标**：站点页可设置 / 更换 / 恢复默认，也可直接把图片拖到头像上；图标写入站点 `source/favicon.*`，随站点走，Hexo 生成时网站也会用上
 - 运行日志落地到 `%APPDATA%/hexodeck/hexodeck.log`，应用设置页一键打开
-- 编辑器参数侧栏：分类 / 标签 + 自定义 front-matter 参数（英文键名 + 中文显示名，按站点绑定）；默认收起，顶部按钮随时展开
+- 文章编辑器参数侧栏：分类 / 标签 + 自定义 front-matter 参数（英文键名 + 中文显示名，按站点绑定）；默认收起，顶部按钮随时展开
 
 ## 快速开始
 
@@ -128,7 +128,7 @@ scripts/
 - **Hexo 集成**：不在主进程内嵌 hexo 实例，而是 fork 子进程（Electron 的 Node 模式）承载 hexo；优先加载站点自带的 hexo 与插件（与用户原有环境一致），缺失时回退到应用内嵌引擎（用户无需装 Node）
 - **配置写入**：`_config.yml` 采用行级替换编辑，注释、空行、键顺序原样保留；保存前 YAML 校验，首改自动备份
 - **构建串行队列**：generate/deploy 与 npm 插件安装串行执行，避免 db.json 冲突；npm 命令带 `--yes` 与 5 分钟看门狗
-- **自动更新预留**：electron-builder 已生成 blockmap，发布到 GitHub Releases 时在 `electron-builder.yml` 取消 publish 配置注释并接入 electron-updater 即可
+- **自动更新**：electron-updater + GitHub Releases 全链路已接入（含 blockmap 增量更新，v0.1.1 起端到端验证）；`latest.yml`、安装包、blockmap 必须来自同一次构建
 
 ## 已知限制
 
