@@ -5,6 +5,8 @@ import type {
   BuildCommand,
   ConfigPathKind,
   DeployConfig,
+  PageCreateOptions,
+  PagePatch,
   PostKind,
   PostPatch,
   SiteConfigPatch,
@@ -19,6 +21,10 @@ const api: Api = {
   pickDirectory: () => ipcRenderer.invoke('site:pickDirectory'),
   listRecentSites: () => ipcRenderer.invoke('site:recent'),
   removeRecentSite: (path: string) => ipcRenderer.invoke('site:removeRecent', path),
+  pickSiteIcon: () => ipcRenderer.invoke('site:pickIcon'),
+  setSiteIcon: (fileName: string, base64: string) =>
+    ipcRenderer.invoke('site:setIcon', fileName, base64),
+  clearSiteIcon: () => ipcRenderer.invoke('site:clearIcon'),
 
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   saveAppSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('app:saveSettings', patch),
@@ -35,6 +41,12 @@ const api: Api = {
   searchPosts: (keyword: string) => ipcRenderer.invoke('post:search', keyword),
   getStats: () => ipcRenderer.invoke('stats:get'),
   saveImage: (fileName: string, base64: string) => ipcRenderer.invoke('asset:saveImage', fileName, base64),
+
+  listPages: () => ipcRenderer.invoke('page:list'),
+  readPage: (id: string) => ipcRenderer.invoke('page:read', id),
+  createPage: (options: PageCreateOptions) => ipcRenderer.invoke('page:create', options),
+  savePage: (id: string, patch: PagePatch) => ipcRenderer.invoke('page:save', id, patch),
+  deletePage: (id: string) => ipcRenderer.invoke('page:delete', id),
 
   runBuild: (command: BuildCommand) => ipcRenderer.invoke('build:run', command),
   startPreview: (includeDrafts: boolean) => ipcRenderer.invoke('preview:start', includeDrafts),

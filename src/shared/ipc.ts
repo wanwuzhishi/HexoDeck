@@ -54,6 +54,46 @@ export interface SiteInfo {
   subtitle: string
   postCount: number
   draftCount: number
+  /** 站点图标（favicon）在磁盘上的绝对路径；未设置时为 undefined */
+  iconPath?: string
+  /** 供 <img> 直接使用的图标地址（file:// 带版本参数破缓存） */
+  iconUrl?: string
+}
+
+/** 页面（source/ 下非文章目录的 markdown，如 about/index.md） */
+export interface PageMeta {
+  /** 相对 source 的路径，如 'about/index.md' */
+  id: string
+  title: string
+  date: string
+  wordCount: number
+}
+
+export interface PageDetail extends PageMeta {
+  raw: string
+  content: string
+  /** 完整 front-matter（含自定义字段） */
+  frontMatter: Record<string, unknown>
+}
+
+export interface PageCreateOptions {
+  title: string
+  /** 相对 source 的目标路径，如 'about/index' 或 'contact'；省略扩展名 */
+  path: string
+  /** 初始 front-matter（YAML 原文，解析后写入） */
+  frontMatterYaml?: string
+  content?: string
+}
+
+export interface PagePatch {
+  title?: string
+  date?: string
+  content?: string
+  /**
+   * 自定义 front-matter 字段：写入时合并到现有元数据。
+   * value 为 null 表示删除该键。
+   */
+  extra?: Record<string, string | null>
 }
 
 export interface RecentSite {
@@ -232,6 +272,13 @@ export interface Api {
   listRecentSites(): Promise<RecentSite[]>
   removeRecentSite(path: string): Promise<void>
 
+  /** 站点图标：选择图片文件并写入站点 source/ */
+  pickSiteIcon(): Promise<Result<SiteInfo>>
+  /** 从拖拽的图片文件设置站点图标 */
+  setSiteIcon(fileName: string, base64: string): Promise<Result<SiteInfo>>
+  /** 移除站点图标（删除站点内的 favicon 文件） */
+  clearSiteIcon(): Promise<Result<SiteInfo>>
+
   /** 应用信息与设置 */
   getAppInfo(): Promise<AppInfo>
   saveAppSettings(patch: Partial<AppSettings>): Promise<Result<AppSettings>>
@@ -254,6 +301,13 @@ export interface Api {
   getStats(): Promise<Result<SiteStats>>
   /** 保存图片到 source/images，返回可直接插入 Markdown 的 URL */
   saveImage(fileName: string, base64: string): Promise<Result<string>>
+
+  /** 页面（source/ 下非文章目录的 markdown） */
+  listPages(): Promise<PageMeta[]>
+  readPage(id: string): Promise<Result<PageDetail>>
+  createPage(options: PageCreateOptions): Promise<Result<PageMeta>>
+  savePage(id: string, patch: PagePatch): Promise<Result>
+  deletePage(id: string): Promise<Result>
 
   runBuild(command: BuildCommand): Promise<BuildResult>
   startPreview(includeDrafts: boolean): Promise<Result<string>>

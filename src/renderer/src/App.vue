@@ -3,7 +3,15 @@ import { computed, h, onMounted, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { darkTheme, dateZhCN, NIcon, zhCN } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
-import { DocumentTextOutline, HomeOutline, RocketOutline, SettingsOutline, StatsChartOutline } from '@vicons/ionicons5'
+import {
+  DocumentTextOutline,
+  EyeOutline,
+  HomeOutline,
+  ReaderOutline,
+  RocketOutline,
+  SettingsOutline,
+  StatsChartOutline
+} from '@vicons/ionicons5'
 import { darkOverrides, lightOverrides } from './theme'
 import { useSiteStore } from './stores/site'
 import { useWorkspaceStore } from './stores/workspace'
@@ -31,12 +39,16 @@ const renderIcon = (icon: unknown) => (): ReturnType<typeof h> =>
 const menuOptions: MenuOption[] = [
   { label: '站点', key: '/', icon: renderIcon(HomeOutline) },
   { label: '文章', key: '/posts', icon: renderIcon(DocumentTextOutline) },
+  { label: '页面', key: '/pages', icon: renderIcon(ReaderOutline) },
   { label: '统计', key: '/stats', icon: renderIcon(StatsChartOutline) },
+  { label: '预览', key: '/preview', icon: renderIcon(EyeOutline) },
   { label: '发布', key: '/publish', icon: renderIcon(RocketOutline) },
   { label: '设置', key: '/settings', icon: renderIcon(SettingsOutline) }
 ]
 
-const activeKey = computed(() => (route.path.startsWith('/editor') ? '/posts' : route.path))
+const activeKey = computed(() =>
+  route.path.startsWith('/editor') ? '/posts' : route.path.startsWith('/page-editor') ? '/pages' : route.path
+)
 
 /** 主题按钮：三态循环 亮色 → 暗色 → 跟随系统 */
 const themeButtonIcon = computed(() => {
@@ -266,5 +278,24 @@ onMounted(async () => {
   min-width: 0;
   overflow: auto;
   border-radius: var(--radius-lg);
+  /* 作为列向 flex 容器：编辑器类的整屏页面才能用 flex:1 撑满可视高度，
+     把状态栏固定在底部而不会被内容挤出视口 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 仅编辑器页（.editor-page）撑满 .main；内容流式的 .page 页面保持自然高度滚动 */
+/* 内容流式的 .page 页面保持自然高度滚动 */
+.main > :deep(.page) {
+  flex: none;
+}
+
+/* 编辑器、预览页与发布页需要撑满可视高度（内部再自行滚动）。
+   必须写在 .page 规则之后：两者特异性相同，靠源码顺序覆盖 */
+.main > :deep(.editor-page),
+.main > :deep(.preview-page),
+.main > :deep(.publish-page) {
+  flex: 1;
+  min-height: 0;
 }
 </style>

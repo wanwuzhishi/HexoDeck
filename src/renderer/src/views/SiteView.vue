@@ -17,7 +17,7 @@ import { useSiteStore } from '../stores/site'
 import { usePostsStore } from '../stores/posts'
 import { useWorkspaceStore } from '../stores/workspace'
 import { message } from '../composables/message'
-import type { SiteStats } from '@shared/ipc'
+import type { SiteInfo, SiteStats } from '@shared/ipc'
 
 const siteStore = useSiteStore()
 const posts = usePostsStore()
@@ -38,11 +38,83 @@ const site = computed(() => siteStore.site)
 const RECENT_LIMIT = 3
 const recentPosts = computed(() => posts.posts.slice(0, RECENT_LIMIT))
 
-/** 站点标识的首字母/首字，用于头像位 */
+/** 站点标识的首字母/首字，用于无图标时的头像位 */
 const siteInitial = computed(() => {
   const name = site.value?.title || site.value?.name || 'H'
   return name.trim().charAt(0).toUpperCase()
 })
+
+// ---------- 自定义站点图标 ----------
+const iconBusy = ref(false)
+const iconDragActive = ref(false)
+
+/** 图标写入站点 source/，后端回传新的 SiteInfo，这里直接替换以立即刷新头像 */
+function applyIconResult(r: { ok: boolean; error?: string; data?: SiteInfo }): void {
+  if (r.ok && r.data) {
+    siteStore.site = r.data
+    message.success(r.data.iconPath ? '站点图标已更新' : '已恢复默认图标')
+  } else if (r.error && r.error !== 'canceled') {
+    message.error(r.error)
+  }
+}
+
+async function pickIcon(): Promise<void> {
+  iconBusy.value = true
+  try {
+    applyIconResult(await window.api.pickSiteIcon())
+  } finally {
+    iconBusy.value = false
+  }
+}
+
+async function clearIcon(): Promise<void> {
+  iconBusy.value = true
+  try {
+    applyIconResult(await window.api.clearSiteIcon())
+  } finally {
+    iconBusy.value = false
+  }
+}
+
+const ICON_EXT_RE = /\.(ico|png|jpe?g|svg|webp|gif|bmp)$/i
+
+function onIconDragLeave(e: DragEvent): void {
+  const zone = e.currentTarget as HTMLElement
+  if (!zone.contains(e.relatedTarget as Node)) iconDragActive.value = false
+}
+
+/** 直接把图片拖到头像上即可设为站点图标 */
+async function onIconDrop(e: DragEvent): Promise<void> {
+  iconDragActive.value = false
+  const file = Array.from(e.dataTransfer?.files ?? [])[0]
+  if (!file) return
+  if (!ICON_EXT_RE.test(file.name)) {
+    message.error('图标仅支持 .ico / .png / .jpg / .svg / .webp / .gif / .bmp 格式')
+    return
+  }
+  iconBusy.value = true
+  try {
+    const base64 = await fileToBase64(file)
+    applyIconResult(await window.api.setSiteIcon(file.name, base64))
+  } catch (e) {
+    message.error((e as Error).message)
+  } finally {
+    iconBusy.value = false
+  }
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result ?? '')
+      // 去掉 data URL 前缀，主进程按 base64 直接解码
+      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result)
+    }
+    reader.onerror = () => reject(new Error('读取图片失败'))
+    reader.readAsDataURL(file)
+  })
+}
 
 /** 概览指标（空缺时显示 0，避免卡片高度跳动） */
 const metrics = computed(() => {
@@ -131,14 +203,15 @@ async function closeSite(): Promise<void> {
 }
 
 async function quickPreview(): Promise<void> {
+  // 预览已运行则直接跳转，否则先启动再进入预览页
   if (ws.previewUrl) {
-    router.push('/publish')
+    router.push('/preview')
     return
   }
   const r = await ws.startPreview()
   if (r.ok) {
     message.success('预览已启动')
-    router.push('/publish')
+    router.push('/preview')
   } else {
     message.error(r.error ?? '预览启动失败')
   }
@@ -180,7 +253,33 @@ watch(
       <!-- 站点身份卡 -->
       <section class="glass panel hero">
         <div class="hero-main">
-          <div class="site-avatar">{{ siteInitial }}</div>
+          <div class="avatar-wrap">
+            <div
+              class="site-avatar"
+              :class="{ 'has-icon': site.iconUrl, dragging: iconDragActive, busy: iconBusy }"
+              :title="site.iconUrl ? '点击更换站点图标（也可直接拖入图片）' : '点击设置站点图标（也可直接拖入图片）'"
+              @click="pickIcon"
+              @dragenter.prevent="iconDragActive = true"
+              @dragover.prevent="iconDragActive = true"
+              @dragleave.prevent="onIconDragLeave"
+              @drop.prevent="onIconDrop"
+            >
+              <img v-if="site.iconUrl" :src="site.iconUrl" alt="站点图标" />
+              <template v-else>{{ siteInitial }}</template>
+              <!-- 悬停时浮出遮罩，提示此处可点击更换 -->
+              <span class="avatar-mask">{{ site.iconUrl ? '更换' : '设置' }}</span>
+            </div>
+            <n-button
+              v-if="site.iconUrl"
+              size="tiny"
+              quaternary
+              :disabled="iconBusy"
+              title="删除站点内的 favicon 文件"
+              @click="clearIcon"
+            >
+              移除图标
+            </n-button>
+          </div>
           <div class="hero-text">
             <div class="hero-title-row">
               <h2 class="hero-title">{{ site.title || site.name }}</h2>
@@ -188,6 +287,9 @@ watch(
             </div>
             <div v-if="site.subtitle" class="hero-subtitle muted">{{ site.subtitle }}</div>
             <div class="hero-path mono" :title="site.path">{{ site.path }}</div>
+            <div v-if="site.iconPath" class="hero-icon-path muted small" :title="site.iconPath">
+              图标：{{ site.iconPath }}
+            </div>
           </div>
         </div>
         <div class="hero-actions">
@@ -232,8 +334,7 @@ watch(
             <button class="quick-item" @click="quickPreview">
               <span class="quick-icon">◉</span>
               <span class="quick-label">本地预览</span>
-            </button>
-            <button class="quick-item" @click="router.push('/settings?tab=theme')">
+            </button>            <button class="quick-item" @click="router.push('/settings?tab=theme')">
               <span class="quick-icon">◧</span>
               <span class="quick-label">主题设置</span>
             </button>
@@ -424,7 +525,17 @@ watch(
   min-width: 0;
 }
 
+/* 站点图标：无图标时显示首字母，有图标时显示图片，支持拖拽更换 */
+.avatar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
 .site-avatar {
+  position: relative;
   width: 52px;
   height: 52px;
   flex: none;
@@ -438,6 +549,67 @@ watch(
   background: var(--accent-soft);
   border: 1px solid var(--glass-border);
   box-shadow: var(--accent-glow);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.site-avatar:hover {
+  border-color: var(--accent);
+  box-shadow: var(--glass-glow), var(--accent-glow);
+}
+
+/* 悬停遮罩：提示头像可点击更换 */
+.avatar-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.site-avatar:hover .avatar-mask {
+  opacity: 1;
+}
+
+/* 有图标时内边距收紧，让图片铺满圆角方块 */
+.site-avatar.has-icon {
+  padding: 0;
+}
+
+.site-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 拖拽悬停与写入中 */
+.site-avatar.dragging {
+  border-color: var(--accent);
+  border-style: dashed;
+  box-shadow: var(--glass-glow), var(--accent-glow);
+}
+
+.site-avatar.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.hero-icon-path {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46vw;
+  font-family: var(--mono);
 }
 
 .hero-text {

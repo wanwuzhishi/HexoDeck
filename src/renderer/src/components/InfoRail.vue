@@ -17,6 +17,12 @@ const draftCount = computed(() => posts.posts.filter((p) => p.kind === 'draft').
 const totalWords = computed(() => posts.posts.reduce((s, p) => s + p.wordCount, 0))
 const recent = computed(() => posts.posts.slice(0, 5))
 
+/** 无站点图标时用站点名首字占位 */
+const siteInitial = computed(() => {
+  const name = site.site?.title || site.site?.name || 'H'
+  return name.trim().charAt(0).toUpperCase()
+})
+
 // ---------- 站点切换弹窗 ----------
 const showSwitch = ref(false)
 const switching = ref('')
@@ -56,13 +62,18 @@ async function removeSite(path: string, name: string): Promise<void> {
 }
 
 async function quickPreview(): Promise<void> {
+  // 已运行则直达预览页；未运行先启动再进入，避免只弹提示不跳转
   if (ws.previewUrl) {
-    message.info('预览已在运行')
+    router.push('/preview')
     return
   }
   const r = await ws.startPreview()
-  if (r.ok) message.success('预览已启动')
-  else message.error(r.error ?? '预览启动失败')
+  if (r.ok) {
+    message.success('预览已启动')
+    router.push('/preview')
+  } else {
+    message.error(r.error ?? '预览启动失败')
+  }
 }
 
 function openEditor(id: string): void {
@@ -94,7 +105,13 @@ watch(
         <div class="panel-title">站点</div>
         <n-button size="tiny" secondary @click="openSwitch">切换站点</n-button>
       </div>
-      <div class="site-name">{{ site.site?.name ?? '未打开站点' }}</div>
+      <div class="site-name-row">
+        <div class="site-avatar" :class="{ 'has-icon': site.site?.iconUrl }">
+          <img v-if="site.site?.iconUrl" :src="site.site.iconUrl" alt="站点图标" />
+          <template v-else>{{ siteInitial }}</template>
+        </div>
+        <div class="site-name">{{ site.site?.name ?? '未打开站点' }}</div>
+      </div>
       <div class="muted small path">{{ site.site?.path ?? '打开一个 Hexo 站点后显示详情' }}</div>
       <div v-if="ws.previewUrl" class="preview-chip">
         <span class="dot"></span>
@@ -126,9 +143,10 @@ watch(
     <section class="glass panel">
       <div class="panel-title">快捷操作</div>
       <div class="ops">
-        <n-button size="small" block secondary @click="quickPreview">启动本地预览</n-button>
+        <n-button size="small" block secondary @click="quickPreview">本地预览</n-button>
         <n-button size="small" block secondary @click="router.push('/publish')">构建与部署</n-button>
         <n-button size="small" block secondary @click="router.push('/posts')">管理文章</n-button>
+        <n-button size="small" block secondary @click="router.push('/pages')">管理页面</n-button>
         <n-button size="small" block secondary @click="router.push('/settings?tab=base')">基础配置</n-button>
         <n-button size="small" block secondary @click="router.push('/settings?tab=theme')">主题</n-button>
       </div>
@@ -226,10 +244,48 @@ watch(
   gap: 8px;
 }
 
+.site-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 站点图标：有图标显示图片，无图标显示首字母 */
+.site-avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--glass-border);
+  overflow: hidden;
+}
+
+.site-avatar.has-icon {
+  padding: 0;
+}
+
+.site-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .site-name {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .path {

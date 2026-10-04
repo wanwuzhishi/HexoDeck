@@ -1,8 +1,22 @@
 import { promises as fs } from 'fs'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { load as loadYaml } from 'js-yaml'
 import type { SiteInfo } from '@shared/ipc'
 import { listPosts } from './post-service'
+import { findSiteIcon } from './asset-service'
+
+/** 站点图标信息：绝对路径 + 供 <img> 使用的 file:// 地址（带 mtime 破缓存） */
+async function readIcon(siteDir: string): Promise<{ iconPath?: string; iconUrl?: string }> {
+  const iconPath = findSiteIcon(siteDir)
+  if (!iconPath) return {}
+  try {
+    const stat = await fs.stat(iconPath)
+    return { iconPath, iconUrl: `${pathToFileURL(iconPath).href}?v=${Math.floor(stat.mtimeMs)}` }
+  } catch {
+    return { iconPath }
+  }
+}
 
 /** 校验并读取站点信息；不合法时抛错 */
 export async function openSite(sitePath: string): Promise<SiteInfo> {
@@ -34,7 +48,8 @@ export async function openSite(sitePath: string): Promise<SiteInfo> {
     title,
     subtitle: String(config.subtitle ?? ''),
     postCount: posts.filter((p) => p.kind === 'post').length,
-    draftCount: posts.filter((p) => p.kind === 'draft').length
+    draftCount: posts.filter((p) => p.kind === 'draft').length,
+    ...(await readIcon(dir))
   }
 }
 
