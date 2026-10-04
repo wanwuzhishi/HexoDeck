@@ -817,12 +817,13 @@ watch(activeTab, (tab) => {
                   </div>
                   <div class="icon-info">
                     <n-space :size="8" align="center">
-                      <n-button size="small" secondary :loading="iconBusy" @click="pickSiteIcon">
+                      <n-button size="tiny" secondary :loading="iconBusy" @click="pickSiteIcon">
                         选择图片
                       </n-button>
                       <n-button
                         v-if="site.site?.iconUrl"
-                        size="small"
+                        size="tiny"
+                        type="error"
                         quaternary
                         :disabled="iconBusy"
                         @click="clearSiteIcon"
@@ -1180,12 +1181,12 @@ watch(activeTab, (tab) => {
               </n-form-item>
             </n-form>
             <n-space>
-              <n-button size="small" :loading="ws.updateStatus.state === 'checking'" @click="checkUpdate">
+              <n-button size="tiny" secondary :loading="ws.updateStatus.state === 'checking'" @click="checkUpdate">
                 立即检查更新
               </n-button>
               <n-button
                 v-if="ws.updateStatus.state === 'downloaded'"
-                size="small"
+                size="tiny"
                 type="primary"
                 @click="installUpdate"
               >
@@ -1211,8 +1212,8 @@ watch(activeTab, (tab) => {
               </div>
             </div>
             <n-space align="center" :size="8">
-              <n-button size="small" secondary @click="openRepo">GitHub 仓库</n-button>
-              <n-button size="small" secondary @click="openIssues">问题反馈</n-button>
+              <n-button size="tiny" secondary @click="openRepo">GitHub 仓库</n-button>
+              <n-button size="tiny" secondary @click="openIssues">问题反馈</n-button>
             </n-space>
           </div>
           <div class="about-foot muted small">
@@ -1232,7 +1233,7 @@ watch(activeTab, (tab) => {
               </n-form-item>
               <n-form-item label="运行日志">
                 <n-space align="center" :size="10">
-                  <n-button size="small" @click="openLogs">打开日志文件夹</n-button>
+                  <n-button size="tiny" secondary @click="openLogs">打开日志文件夹</n-button>
                   <span class="muted small path">{{ appInfo?.logFile || '（启动后生成）' }}</span>
                 </n-space>
               </n-form-item>
@@ -1276,7 +1277,6 @@ watch(activeTab, (tab) => {
         <div class="path-modal-foot">
           <n-button
             v-if="pathModalInfo?.path"
-            size="small"
             quaternary
             type="error"
             :disabled="pathBusy"
@@ -1286,9 +1286,9 @@ watch(activeTab, (tab) => {
           </n-button>
           <span v-else></span>
           <n-space :size="8">
-            <n-button size="small" :disabled="pathBusy" @click="closePathModal(true)">取消</n-button>
-            <n-button size="small" secondary :loading="pathBusy" @click="applyDefaultPath">使用默认位置</n-button>
-            <n-button size="small" type="primary" :loading="pathBusy" @click="browseConfigPath">浏览选择…</n-button>
+            <n-button :disabled="pathBusy" @click="closePathModal(true)">取消</n-button>
+            <n-button secondary :loading="pathBusy" @click="applyDefaultPath">使用默认位置</n-button>
+            <n-button type="primary" :loading="pathBusy" @click="browseConfigPath">浏览选择…</n-button>
           </n-space>
         </div>
       </template>

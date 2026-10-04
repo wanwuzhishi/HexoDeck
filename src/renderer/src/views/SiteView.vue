@@ -272,6 +272,7 @@ watch(
             <n-button
               v-if="site.iconUrl"
               size="tiny"
+              type="error"
               quaternary
               :disabled="iconBusy"
               title="删除站点内的 favicon 文件"
@@ -286,17 +287,16 @@ watch(
               <n-tag size="small" type="success" round :bordered="false">已连接</n-tag>
             </div>
             <div v-if="site.subtitle" class="hero-subtitle muted">{{ site.subtitle }}</div>
-            <div class="hero-path mono" :title="site.path">{{ site.path }}</div>
-            <div v-if="site.iconPath" class="hero-icon-path muted small" :title="site.iconPath">
-              图标：{{ site.iconPath }}
+            <div class="hero-path mono" :title="site.iconPath ? `图标：${site.iconPath}` : site.path">
+              {{ site.path }}
             </div>
           </div>
         </div>
         <div class="hero-actions">
-          <n-button size="small" secondary @click="refreshAll">刷新</n-button>
-          <n-button size="small" secondary @click="showSwitch = true">切换站点</n-button>
-          <n-button size="small" quaternary @click="siteStore.openViaDialog()">添加站点</n-button>
-          <n-button size="small" quaternary @click="closeSite">关闭站点</n-button>
+          <n-button secondary @click="refreshAll">刷新</n-button>
+          <n-button secondary @click="showSwitch = true">切换站点</n-button>
+          <n-button secondary @click="siteStore.openViaDialog()">添加站点</n-button>
+          <n-button secondary @click="closeSite">关闭站点</n-button>
         </div>
       </section>
 
@@ -304,7 +304,7 @@ watch(
       <section class="glass panel">
         <div class="panel-head-row">
           <div class="panel-title">写作概览</div>
-          <n-button size="tiny" quaternary @click="router.push('/stats')">查看完整统计</n-button>
+          <n-button secondary @click="router.push('/stats')">查看完整统计</n-button>
         </div>
         <n-spin :show="statsLoading">
           <div class="metric-grid">
@@ -349,7 +349,7 @@ watch(
         <section class="glass panel">
           <div class="panel-head-row">
             <div class="panel-title">最近文章</div>
-            <n-button size="tiny" quaternary @click="router.push('/posts')">全部文章</n-button>
+            <n-button secondary @click="router.push('/posts')">全部文章</n-button>
           </div>
           <div v-if="recentPosts.length" class="recent-posts">
             <div v-for="p in recentPosts" :key="p.id" class="post-row" @click="openPost(p.id)">
@@ -370,9 +370,9 @@ watch(
         <div class="panel-head-row">
           <div class="panel-title">站点管理</div>
           <n-space :size="6">
-            <n-button size="tiny" secondary @click="siteStore.openViaDialog()">添加站点</n-button>
-            <n-button size="tiny" quaternary @click="showCreate = true">新建站点</n-button>
-            <n-button size="tiny" quaternary @click="refreshRecents">刷新</n-button>
+            <n-button secondary @click="siteStore.openViaDialog()">添加站点</n-button>
+            <n-button secondary @click="showCreate = true">新建站点</n-button>
+            <n-button secondary @click="refreshRecents">刷新</n-button>
           </n-space>
         </div>
         <div v-if="siteStore.recents.length" class="recents">
@@ -396,12 +396,12 @@ watch(
             <n-button
               v-if="r.path !== site.path"
               size="tiny"
+              type="error"
               quaternary
               @click.stop="siteStore.removeRecent(r.path)"
             >
               移除
             </n-button>
-            <span v-else class="muted small">使用中</span>
           </div>
         </div>
         <div v-else class="muted small">暂无其他站点，点击「添加站点」选择一个 Hexo 博客文件夹（含 _config.yml）</div>
@@ -420,8 +420,8 @@ watch(
           <n-button type="primary" :loading="siteStore.loading" @click="siteStore.openViaDialog()">
             添加站点
           </n-button>
-          <n-button v-if="siteStore.recents.length" @click="showSwitch = true">切换站点</n-button>
-          <n-button @click="showCreate = true">新建站点</n-button>
+          <n-button v-if="siteStore.recents.length" secondary @click="showSwitch = true">切换站点</n-button>
+          <n-button secondary @click="showCreate = true">新建站点</n-button>
         </n-space>
 
         <div v-if="siteStore.recents.length" class="recents welcome-recents">
@@ -431,7 +431,7 @@ watch(
               <span class="r-name">{{ r.name }}</span>
               <div class="r-path muted small">{{ r.path }}</div>
             </div>
-            <n-button size="tiny" quaternary @click="siteStore.removeRecent(r.path)">移除</n-button>
+            <n-button size="tiny" type="error" quaternary @click="siteStore.removeRecent(r.path)">移除</n-button>
           </div>
         </div>
         <n-empty v-else description="暂无历史记录" size="small" style="margin-top: 18px" />
@@ -458,12 +458,12 @@ watch(
           <n-button
             v-if="r.path !== site?.path"
             size="tiny"
+            type="error"
             quaternary
             @click.stop="siteStore.removeRecent(r.path)"
           >
             移除
           </n-button>
-          <span v-else class="muted small">使用中</span>
         </div>
         <div v-if="!siteStore.recents.length" class="muted small">
           还没有添加过站点，请先点击「添加站点」选择一个 Hexo 博客文件夹。
@@ -507,6 +507,8 @@ watch(
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  /* 头部按钮比标题高：补出按钮到下方内容的间距（标题自带 12px 下边距，按钮没有） */
+  margin-bottom: 12px;
 }
 
 /* 站点身份卡 */
@@ -601,15 +603,6 @@ watch(
 .site-avatar.busy {
   opacity: 0.6;
   pointer-events: none;
-}
-
-.hero-icon-path {
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 46vw;
-  font-family: var(--mono);
 }
 
 .hero-text {

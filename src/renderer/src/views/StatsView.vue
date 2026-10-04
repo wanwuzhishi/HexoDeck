@@ -93,7 +93,7 @@ watch(
         <section class="glass panel">
           <div class="panel-head-row">
             <div class="panel-title">数据概览</div>
-            <n-button size="tiny" quaternary @click="load">刷新</n-button>
+            <n-button secondary @click="load">刷新</n-button>
           </div>
           <div class="stat-grid">
             <div v-for="o in overview" :key="o.label" class="stat-card">
@@ -208,7 +208,7 @@ watch(
               </div>
             </div>
             <n-space v-if="stats.uncategorized || stats.untagged" style="margin-top: 10px">
-              <n-button size="tiny" secondary @click="openPosts">去整理文章</n-button>
+              <n-button secondary @click="openPosts">去整理文章</n-button>
             </n-space>
           </section>
         </div>
@@ -236,6 +236,8 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* 头部按钮比标题高：补出按钮到下方内容的间距（标题自带 12px 下边距，按钮没有） */
+  margin-bottom: 12px;
 }
 
 /* 双列区：列间距与行间距一致 */

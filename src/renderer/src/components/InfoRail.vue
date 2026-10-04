@@ -103,7 +103,7 @@ watch(
     <section class="glass panel">
       <div class="panel-head-row">
         <div class="panel-title">站点</div>
-        <n-button size="tiny" secondary @click="openSwitch">切换站点</n-button>
+        <n-button secondary @click="openSwitch">切换站点</n-button>
       </div>
       <div class="site-name-row">
         <div class="site-avatar" :class="{ 'has-icon': site.site?.iconUrl }">
@@ -184,12 +184,12 @@ watch(
           <n-button
             v-if="r.path !== site.site?.path"
             size="tiny"
+            type="error"
             quaternary
             @click.stop="removeSite(r.path, r.name)"
           >
             移除
           </n-button>
-          <span v-else class="muted small">使用中</span>
         </div>
         <div v-if="!site.recents.length" class="muted small">
           还没有添加过站点，请先在「站点」页用「添加站点」选择一个 Hexo 博客文件夹。
@@ -242,6 +242,8 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* 头部按钮比标题高：补出按钮到下方内容的间距（标题自带 12px 下边距，按钮没有） */
+  margin-bottom: 12px;
 }
 
 .site-name-row {

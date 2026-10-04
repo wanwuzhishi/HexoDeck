@@ -56,17 +56,16 @@ onMounted(() => {
           </n-tag>
           <n-checkbox v-model:checked="ws.previewIncludeDrafts" size="small">包含草稿</n-checkbox>
           <n-button
-            size="small"
-            type="primary"
+            secondary
             :loading="ws.previewStarting"
             :disabled="!!ws.previewUrl"
             @click="start"
           >
             启动预览
           </n-button>
-          <n-button size="small" :disabled="!ws.previewUrl" @click="ws.stopPreview()">停止</n-button>
-          <n-button size="small" :disabled="!ws.previewUrl" @click="openBrowser">浏览器打开</n-button>
-          <n-button size="small" :disabled="!ws.previewUrl" @click="reloadFrame">刷新</n-button>
+          <n-button secondary :disabled="!ws.previewUrl" @click="ws.stopPreview()">停止</n-button>
+          <n-button secondary :disabled="!ws.previewUrl" @click="openBrowser">浏览器打开</n-button>
+          <n-button secondary :disabled="!ws.previewUrl" @click="reloadFrame">刷新</n-button>
         </n-space>
       </div>
 

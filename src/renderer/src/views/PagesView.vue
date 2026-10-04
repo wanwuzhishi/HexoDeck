@@ -76,7 +76,7 @@ const columns: DataTableColumns<PageMeta> = [
               trigger: () =>
                 h(
                   NButton,
-                  { size: 'tiny', type: 'error', quaternary: true },
+                  { size: 'tiny', secondary: true, class: 'btn-danger' },
                   { default: () => '删除' }
                 ),
               default: () => '删除后移入系统回收站，确定吗？'
@@ -149,7 +149,7 @@ watch(
             style="width: 200px"
           />
           <n-button type="primary" @click="openCreate">新建页面</n-button>
-          <n-button quaternary @click="pages.load()">刷新</n-button>
+          <n-button secondary @click="pages.load()">刷新</n-button>
         </n-space>
       </div>
       <div class="muted small hint">

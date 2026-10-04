@@ -18,6 +18,18 @@ export const lightOverrides: GlobalThemeOverrides = {
   Card: { borderRadius: '18px' },
   Modal: { borderRadius: '18px' },
   Popover: { borderRadius: '14px' },
+  Button: {
+    borderRadius: '8px',
+    // quaternary 极轻按钮（表格编辑/删除、工具栏、收起等）：
+    // naive-ui 不为 quaternary 生成类名，CSS 够不到，只能在主题覆盖里配置。
+    // 常态透明底 + 次级文字，悬停给主题浅底（亮色冰蓝 / 暗色霓虹青）。
+    colorQuaternary: 'rgba(0, 0, 0, 0)',
+    colorQuaternaryHover: 'rgba(56, 168, 220, 0.12)',
+    colorQuaternaryPressed: 'rgba(56, 168, 220, 0.18)',
+    colorQuaternaryFocus: 'rgba(56, 168, 220, 0.12)',
+    textColorQuaternary: 'rgba(34, 56, 78, 0.62)',
+    textColorTertiary: 'rgba(34, 56, 78, 0.62)'
+  },
   DataTable: {
     borderRadius: '14px',
     color: 'transparent',
@@ -49,6 +61,16 @@ export const darkOverrides: GlobalThemeOverrides = {
   Card: { borderRadius: '18px' },
   Modal: { borderRadius: '18px' },
   Popover: { borderRadius: '14px' },
+  Button: {
+    borderRadius: '8px',
+    // quaternary 极轻按钮：同亮色的策略，用暗色主题的霓虹青与次级文字
+    colorQuaternary: 'rgba(0, 0, 0, 0)',
+    colorQuaternaryHover: 'rgba(34, 211, 238, 0.11)',
+    colorQuaternaryPressed: 'rgba(34, 211, 238, 0.17)',
+    colorQuaternaryFocus: 'rgba(34, 211, 238, 0.11)',
+    textColorQuaternary: 'rgba(205, 225, 245, 0.6)',
+    textColorTertiary: 'rgba(205, 225, 245, 0.6)'
+  },
   DataTable: {
     borderRadius: '14px',
     color: 'transparent',

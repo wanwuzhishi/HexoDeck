@@ -103,7 +103,7 @@ const columns: DataTableColumns<PostRow> = [
             { onPositiveClick: () => remove(row) },
             {
               trigger: () =>
-                h(NButton, { size: 'tiny', type: 'error', quaternary: true }, { default: () => '删除' }),
+                h(NButton, { size: 'tiny', secondary: true, class: 'btn-danger' }, { default: () => '删除' }),
               default: () => '删除后移入系统回收站，确定吗？'
             }
           )
@@ -159,8 +159,8 @@ onMounted(() => {
             style="width: 220px"
           />
           <n-button type="primary" @click="openCreate('post')">新建文章</n-button>
-          <n-button @click="openCreate('draft')">新建草稿</n-button>
-          <n-button quaternary @click="posts.load()">刷新</n-button>
+          <n-button secondary @click="openCreate('draft')">新建草稿</n-button>
+          <n-button secondary @click="posts.load()">刷新</n-button>
         </n-space>
       </div>
 

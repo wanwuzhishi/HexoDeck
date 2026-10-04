@@ -227,3 +227,62 @@ a {
 .page {
   padding: 4px 6px;
 }
+
+/* ============ 小按钮统一规范 ============
+ * 全应用次要操作按钮（刷新 / 切换 / 添加 / 移除 / 删除等）的统一样式。
+ * 用法约定：
+ *   - 工具栏、卡片标题栏 → size="tiny" + secondary   玻璃浅底，易发现
+ *   - 表格行内操作       → size="tiny" + quaternary  无底色极轻，悬停浅底
+ *   - 危险操作           → size="tiny" + type="error" 常态中性，悬停红底白字
+ *
+ * 实现说明（重要，改动前先读）：
+ * 1. naive-ui 按钮配色完全由内联 CSS 变量驱动，覆盖必须用变量 + !important，
+ *    直接写 background-color/color 会被组件自身规则盖掉。
+ * 2. naive-ui 只生成 type（--error-type 等）与 secondary 的类名，
+ *    quaternary / text / tertiary 没有任何类名——CSS 选择器够不到它们，
+ *    它们的常态与悬停底色只能在 theme.ts 的 Button overrides 里按主题配置。
+ */
+
+/* 次要按钮（secondary）：玻璃浅底替代默认中性灰，与 metric 卡、快捷格子同色调 */
+.n-button.n-button--secondary {
+  --n-color: var(--accent-soft) !important;
+  --n-color-hover: color-mix(in srgb, var(--accent) 20%, transparent) !important;
+  --n-color-pressed: color-mix(in srgb, var(--accent) 14%, transparent) !important;
+  --n-color-focus: var(--accent-soft) !important;
+  --n-color-disabled: var(--accent-soft) !important;
+  --n-text-color: var(--text-1) !important;
+  --n-text-color-hover: var(--accent) !important;
+  --n-text-color-pressed: var(--accent) !important;
+  --n-text-color-focus: var(--accent) !important;
+  --n-border: 1px solid var(--glass-border) !important;
+  --n-border-hover: 1px solid var(--accent) !important;
+  --n-border-pressed: 1px solid var(--accent) !important;
+  --n-border-focus: 1px solid var(--accent) !important;
+  --n-border-disabled: 1px solid transparent !important;
+  --n-border-radius: 8px !important;
+}
+
+/* 危险操作（error，本项目里均为 quaternary）：常态与其他按钮一致（中性文字），
+   悬停才变红底白字——危险信号在交互时揭示，而不是常驻红字轰炸视觉。
+   注意选择器只能用 --error-type（quaternary 无类名，见顶部说明）。 */
+.n-button.n-button--error-type {
+  --n-text-color: var(--text-2) !important;
+  --n-color-hover: var(--danger) !important;
+  --n-color-pressed: var(--danger) !important;
+  --n-color-focus: var(--danger) !important;
+  --n-text-color-hover: #fff !important;
+  --n-text-color-pressed: #fff !important;
+  --n-text-color-focus: #fff !important;
+  --n-border-hover: var(--danger) !important;
+}
+
+/* 危险标记按钮（如表格「删除」）：保持与「编辑」一致的次级样式，
+   悬停时红底白字提示危险。选择器比上面的 secondary 规则高一级，确保覆盖生效 */
+.n-button.n-button--secondary.btn-danger {
+  --n-color-hover: var(--danger) !important;
+  --n-color-pressed: var(--danger) !important;
+  --n-color-focus: var(--danger) !important;
+  --n-text-color-hover: #fff !important;
+  --n-text-color-pressed: #fff !important;
+  --n-border-hover: var(--danger) !important;
+}
