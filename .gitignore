@@ -11,3 +11,4 @@ resources/embed/node_modules/
 fix-*.log
 *.dmp
 dist/HexoDeck-Portable/
+.zcode/

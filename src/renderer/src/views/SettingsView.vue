@@ -27,7 +27,7 @@ import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
 import CodeEditor from '../components/CodeEditor.vue'
 import appIcon from '../assets/app-icon.png'
-import type { AppInfo, ConfigPathInfo, ConfigPathKind, PluginInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
+import type { AppInfo, ConfigPathInfo, ConfigPathKind, PluginInfo, SiteInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
 
 const site = useSiteStore()
 const ws = useWorkspaceStore()
@@ -51,6 +51,82 @@ watch(
   }
 )
 const loading = ref(false)
+
+// ---------- 站点图标（写入站点 source/，随站点走） ----------
+const iconBusy = ref(false)
+const iconDragActive = ref(false)
+
+/** 无图标时用站点名首字占位 */
+const siteInitial = computed(() => {
+  const name = site.site?.title || site.site?.name || 'H'
+  return name.trim().charAt(0).toUpperCase()
+})
+
+/** 后端回传新的 SiteInfo，替换后头像立即刷新 */
+function applyIconResult(r: { ok: boolean; error?: string; data?: SiteInfo }): void {
+  if (r.ok && r.data) {
+    site.site = r.data
+    message.success(r.data.iconPath ? '站点图标已更新' : '已移除站点图标')
+  } else if (r.error && r.error !== 'canceled') {
+    message.error(r.error)
+  }
+}
+
+async function pickSiteIcon(): Promise<void> {
+  iconBusy.value = true
+  try {
+    applyIconResult(await window.api.pickSiteIcon())
+  } finally {
+    iconBusy.value = false
+  }
+}
+
+async function clearSiteIcon(): Promise<void> {
+  iconBusy.value = true
+  try {
+    applyIconResult(await window.api.clearSiteIcon())
+  } finally {
+    iconBusy.value = false
+  }
+}
+
+const ICON_EXT_RE = /\.(ico|png|jpe?g|svg|webp|gif|bmp)$/i
+
+function onIconDragLeave(e: DragEvent): void {
+  const zone = e.currentTarget as HTMLElement
+  if (!zone.contains(e.relatedTarget as Node)) iconDragActive.value = false
+}
+
+/** 把图片文件读成 base64（IPC 需要纯 base64，去掉 data URL 前缀） */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result ?? '')
+      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result)
+    }
+    reader.onerror = () => reject(new Error('读取图片失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function onIconDrop(e: DragEvent): Promise<void> {
+  iconDragActive.value = false
+  const file = Array.from(e.dataTransfer?.files ?? [])[0]
+  if (!file) return
+  if (!ICON_EXT_RE.test(file.name)) {
+    message.error('图标仅支持 .ico / .png / .jpg / .svg / .webp / .gif / .bmp 格式')
+    return
+  }
+  iconBusy.value = true
+  try {
+    applyIconResult(await window.api.setSiteIcon(file.name, await fileToBase64(file)))
+  } catch (e) {
+    message.error((e as Error).message)
+  } finally {
+    iconBusy.value = false
+  }
+}
 
 // ---------- 基础配置（reactive：模板中无需判空） ----------
 const base = reactive({
@@ -76,6 +152,21 @@ const installingDeployer = ref('')
 
 const hasGitDeployer = computed(() => plugins.value.some((p) => p.name === 'hexo-deployer-git'))
 const showDeployerWarning = computed(() => deploy.type === 'git' && !hasGitDeployer.value)
+
+/** 部署配置问题提示：与主进程 validateDeployConfig 保持同一口径。
+ *  branch 为空时 deployer 会执行 `git push <repo> HEAD:`（非法 ref），推送必然失败 */
+const deployIssue = computed(() => {
+  if (deploy.type !== 'git') return ''
+  if (!deploy.repo.trim()) return '尚未填写仓库地址'
+  if (!deploy.branch.trim()) {
+    return '分支为空会导致 git 推送失败，请填写（GitHub Pages 通常为 main）'
+  }
+  // 仓库名本身可含点（如 u.github.io），只看结尾是否有 .git
+  if (/^https?:\/\/github\.com\/[^/]+\/.+$/.test(deploy.repo.trim()) && !/\.git$/.test(deploy.repo.trim())) {
+    return '仓库地址建议以 .git 结尾，否则可能无法识别为 Git 仓库'
+  }
+  return ''
+})
 
 const deployTypeOptions = [
   { label: 'Git（GitHub Pages / Coding 等）', value: 'git' },
@@ -708,6 +799,47 @@ watch(activeTab, (tab) => {
         <section class="glass panel">
           <div class="form-narrow">
             <n-form label-placement="left" :label-width="110">
+              <n-form-item label="站点图标">
+                <div class="icon-field">
+                  <div
+                    class="icon-preview"
+                    :class="{ 'has-icon': site.site?.iconUrl, dragging: iconDragActive, busy: iconBusy }"
+                    :title="site.site?.iconUrl ? '点击更换图标（也可直接拖入图片）' : '点击设置图标（也可直接拖入图片）'"
+                    @click="pickSiteIcon"
+                    @dragenter.prevent="iconDragActive = true"
+                    @dragover.prevent="iconDragActive = true"
+                    @dragleave.prevent="onIconDragLeave"
+                    @drop.prevent="onIconDrop"
+                  >
+                    <img v-if="site.site?.iconUrl" :src="site.site.iconUrl" alt="站点图标" />
+                    <template v-else>{{ siteInitial }}</template>
+                    <span class="icon-mask">{{ site.site?.iconUrl ? '更换' : '设置' }}</span>
+                  </div>
+                  <div class="icon-info">
+                    <n-space :size="8" align="center">
+                      <n-button size="small" secondary :loading="iconBusy" @click="pickSiteIcon">
+                        选择图片
+                      </n-button>
+                      <n-button
+                        v-if="site.site?.iconUrl"
+                        size="small"
+                        quaternary
+                        :disabled="iconBusy"
+                        @click="clearSiteIcon"
+                      >
+                        移除
+                      </n-button>
+                    </n-space>
+                    <div class="muted small icon-tip">
+                      支持 .ico / .png / .jpg / .svg / .webp，也可直接把图片拖到左侧方块上。
+                      图标写入站点 <code>source/favicon.*</code>，Hexo 生成时网站也会用上。
+                    </div>
+                    <div v-if="site.site?.iconPath" class="muted small path" :title="site.site.iconPath">
+                      {{ site.site.iconPath }}
+                    </div>
+                  </div>
+                </div>
+              </n-form-item>
               <n-form-item label="站点标题"><n-input v-model:value="base.title" /></n-form-item>
               <n-form-item label="副标题"><n-input v-model:value="base.subtitle" /></n-form-item>
               <n-form-item label="站点描述"><n-input v-model:value="base.description" type="textarea" :rows="2" /></n-form-item>
@@ -740,9 +872,16 @@ watch(activeTab, (tab) => {
               <n-form-item label="部署方式"><n-select v-model:value="deploy.type" :options="deployTypeOptions" /></n-form-item>
               <template v-if="deploy.type === 'git'">
                 <n-form-item label="仓库地址">
-                  <n-input v-model:value="deploy.repo" placeholder="https://github.com/用户名/仓库.git 或 git@…" />
+                  <n-input v-model:value="deploy.repo" placeholder="https://github.com/用户名/用户名.github.io.git" />
                 </n-form-item>
-                <n-form-item label="分支"><n-input v-model:value="deploy.branch" placeholder="main" /></n-form-item>
+                <n-form-item label="分支">
+                  <n-space align="center" :size="8">
+                    <n-input v-model:value="deploy.branch" placeholder="main" style="width: 200px" />
+                    <!-- 两个快捷选项保持同一视觉（都用 secondary），避免一主一次的错位感 -->
+                    <n-button size="tiny" secondary @click="deploy.branch = 'main'">main</n-button>
+                    <n-button size="tiny" secondary @click="deploy.branch = 'master'">master</n-button>
+                  </n-space>
+                </n-form-item>
               </template>
             </n-form>
 
@@ -753,10 +892,15 @@ watch(activeTab, (tab) => {
               </n-button>
             </div>
 
+            <!-- 会导致推送失败的配置问题，提前提示而不是等部署时才暴露 -->
+            <div v-if="deployIssue" class="warn-box">
+              <span>⚠ {{ deployIssue }}</span>
+            </div>
+
             <n-space>
               <n-button type="primary" :loading="savingDeploy" @click="saveDeploy">保存部署配置</n-button>
               <n-button @click="quickGenerate">生成静态页面</n-button>
-              <span class="muted small">保存后到「发布」页执行部署上线</span>
+              <span class="muted small">保存后到「发布」页执行部署上线（部署前会自动生成一次）</span>
             </n-space>
           </div>
         </section>
@@ -1242,6 +1386,99 @@ watch(activeTab, (tab) => {
 
 .path {
   word-break: break-all;
+}
+
+/* 站点图标字段：左预览 + 右说明 */
+.icon-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.icon-preview {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--accent-glow);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.icon-preview:hover {
+  border-color: var(--accent);
+  box-shadow: var(--glass-glow), var(--accent-glow);
+}
+
+.icon-preview.has-icon {
+  padding: 0;
+}
+
+.icon-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.icon-preview.dragging {
+  border-color: var(--accent);
+  border-style: dashed;
+  box-shadow: var(--glass-glow), var(--accent-glow);
+}
+
+.icon-preview.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* 悬停遮罩：提示可点击更换 */
+.icon-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.icon-preview:hover .icon-mask {
+  opacity: 1;
+}
+
+.icon-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.icon-tip {
+  line-height: 1.7;
+}
+
+.icon-tip code {
+  font-family: var(--mono);
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--accent-soft);
 }
 
 /* 路径未指定时的占位说明 */

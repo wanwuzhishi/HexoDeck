@@ -1,31 +1,22 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  NButton,
-  NDatePicker,
-  NIcon,
-  NInput,
-  NPopconfirm,
-  NSelect,
-  NSpace,
-  NTag
-} from 'naive-ui'
+import { NButton, NDatePicker, NIcon, NInput, NPopconfirm, NSpace, NTag } from 'naive-ui'
 import { ChevronBackOutline } from '@vicons/ionicons5'
 import MarkdownIt from 'markdown-it'
 import { useSiteStore } from '../stores/site'
-import { usePostsStore } from '../stores/posts'
+import { usePagesStore } from '../stores/pages'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
 import { countWords } from '../composables/wordcount'
 import { FIELD_NAME_RE, useCustomFields } from '../composables/customFields'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
-import type { PostDetail } from '@shared/ipc'
+import type { PageDetail } from '@shared/ipc'
 
 const route = useRoute()
 const router = useRouter()
-const posts = usePostsStore()
+const pages = usePagesStore()
 const siteStore = useSiteStore()
 const ws = useWorkspaceStore()
 const ui = useUiStore()
@@ -33,11 +24,13 @@ const ui = useUiStore()
 const md = new MarkdownIt({ html: true, linkify: true })
 
 const id = computed(() => String(route.query.id ?? ''))
-const detail = ref<PostDetail | null>(null)
-const form = ref({ title: '', date: '', tags: [] as string[], categories: [] as string[], content: '' })
+const detail = ref<PageDetail | null>(null)
+const form = ref({ title: '', date: '', content: '' })
 const snapshot = ref('')
 const saving = ref(false)
-/** 分栏预览开关：默认开启，用户选择记入 localStorage（下次打开编辑器沿用） */
+const lastSavedAt = ref('')
+
+/** 分栏预览开关：与文章编辑器共用同一个记忆键，保持一致的阅读习惯 */
 const PREVIEW_KEY = 'hexodeck-editor-preview'
 const showPreview = ref(localStorage.getItem(PREVIEW_KEY) !== '0')
 
@@ -55,20 +48,21 @@ function toggleParams(): void {
   localStorage.setItem(PARAMS_KEY, showParams.value ? '1' : '0')
 }
 
-/** 自定义 front-matter 字段（不含内置的 title/date/tags/categories）。
- *  收集、登记与序列化逻辑与页面编辑器共用 customFields composable */
-const BUILTIN_KEYS = ['title', 'date', 'tags', 'categories']
+// ---------- 页面参数：与文章编辑器共用同一套「参数名 + 值」卡片逻辑 ----------
+
+/** 页面的内置字段（由上方表单维护，不计入自定义参数） */
+const BUILTIN_KEYS = ['title', 'date']
 
 const {
   customFields,
   fieldLabel,
-  applyFrom: applyCustomFields,
+  applyFrom,
   add: addField,
   remove: removeField,
-  buildExtra: buildCustomExtra,
+  buildExtra,
   readOnlyMeta,
   setFrontMatter
-} = useCustomFields({ builtinKeys: BUILTIN_KEYS, onSnapshot: () => takeSnapshotOnly() })
+} = useCustomFields({ builtinKeys: BUILTIN_KEYS, onSnapshot: () => takeSnapshot() })
 
 /** 添加参数弹窗 */
 const showAddField = ref(false)
@@ -98,85 +92,49 @@ function confirmAddField(): void {
     addFieldError.value = `参数 ${key} 已存在`
     return
   }
-
-  // 参数值属于每篇文章各自的内容，这里只登记字段名，值留空由用户填写
   addField(key, newFieldLabel.value.trim())
   showAddField.value = false
-}
-
-/** 仅刷新快照、不触发保存：用于新增空字段这类本地编辑态变更 */
-function takeSnapshotOnly(): void {
-  snapshot.value = JSON.stringify([
-    form.value.title,
-    form.value.date,
-    form.value.tags,
-    form.value.categories,
-    form.value.content,
-    customFields.value
-  ])
 }
 
 function removeCustomField(i: number): void {
   removeField(i)
 }
 
-const lastSavedAt = ref('')
-
-const dirty = computed(
-  () =>
-    detail.value !== null &&
-    JSON.stringify([
-      form.value.title,
-      form.value.date,
-      form.value.tags,
-      form.value.categories,
-      form.value.content,
-      // 自定义参数也纳入脏检查，否则改完不会触发保存
-      customFields.value
-    ]) !== snapshot.value
-)
-
 const liveWordCount = computed(() => countWords(form.value.content))
 
-// 真实预览运行中，把站内绝对路径图片映射到预览服务器
 const previewHtml = computed(() => {
   const html = md.render(form.value.content)
   return ws.previewUrl ? html.replace(/(src=)"(\/[^"@]*)"/g, `$1="${ws.previewUrl}$2"`) : html
 })
 
-const tagOptions = computed(() => posts.allTags.map((t) => ({ label: t, value: t })))
-const categoryOptions = computed(() => posts.allCategories.map((c) => ({ label: c, value: c })))
-
 function takeSnapshot(): void {
-  snapshot.value = JSON.stringify([
-    form.value.title,
-    form.value.date,
-    form.value.tags,
-    form.value.categories,
-    form.value.content,
-    customFields.value
-  ])
+  snapshot.value = JSON.stringify([form.value.title, form.value.date, form.value.content, customFields.value])
 }
+
+const dirty = computed(
+  () =>
+    detail.value !== null &&
+    JSON.stringify([form.value.title, form.value.date, form.value.content, customFields.value]) !==
+      snapshot.value
+)
 
 async function load(): Promise<void> {
   if (!id.value) return
-  const r = await window.api.readPost(id.value)
+  const r = await window.api.readPage(id.value)
   if (r.ok && r.data) {
     detail.value = r.data
     form.value = {
       title: r.data.title,
       date: r.data.date,
-      tags: [...r.data.tags],
-      categories: [...r.data.categories],
-      // CodeMirror 内部以 LF 为行分隔符，这里统一后再比较，避免 CRLF 文件被误判为已修改
+      // CodeMirror 以 LF 为行分隔符，统一后再比较，避免 CRLF 文件被误判为已修改
       content: r.data.content.replace(/\r\n/g, '\n')
     }
     setFrontMatter(r.data.frontMatter ?? {})
-    applyCustomFields(r.data.frontMatter ?? {})
+    applyFrom(r.data.frontMatter ?? {})
     takeSnapshot()
   } else {
-    message.error(r.error ?? '读取文章失败')
-    router.replace('/posts')
+    message.error(r.error ?? '读取页面失败')
+    router.replace('/pages')
   }
 }
 
@@ -184,29 +142,27 @@ async function save(): Promise<void> {
   if (!detail.value || saving.value) return
   saving.value = true
   try {
-    // 注意：form 是响应式 Proxy，直接传数组给 IPC 会因结构化克隆失败（An object could not be cloned）
-    const r = await window.api.savePost(detail.value.id, {
+    // 注意：form 是响应式 Proxy，直接传对象给 IPC 会因结构化克隆失败
+    const r = await window.api.savePage(detail.value.id, {
       title: form.value.title,
       date: form.value.date,
-      tags: [...form.value.tags],
-      categories: [...form.value.categories],
       content: form.value.content,
-      extra: { ...buildCustomExtra() }
+      extra: { ...buildExtra() }
     })
     if (r.ok) {
       takeSnapshot()
       lastSavedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-      // 重新读取以同步 front-matter（删除的键、YAML 归一化后的值）
-      const fresh = await window.api.readPost(detail.value.id)
+      // 重新读取以同步 YAML 归一化后的 front-matter
+      const fresh = await window.api.readPage(detail.value.id)
       if (fresh.ok && fresh.data) {
         detail.value = fresh.data
-        // 用文件内容 + 站点登记表重建（applyCustomFields 已自动并入登记字段），
-        // 不会再丢失用户登记的参数
+        form.value.title = fresh.data.title
+        form.value.date = fresh.data.date
         setFrontMatter(fresh.data.frontMatter ?? {})
-        applyCustomFields(fresh.data.frontMatter ?? {})
+        applyFrom(fresh.data.frontMatter ?? {})
         takeSnapshot()
       }
-      await posts.load()
+      await pages.load()
     } else {
       message.error(r.error ?? '保存失败')
     }
@@ -215,7 +171,7 @@ async function save(): Promise<void> {
   }
 }
 
-// 自动保存：停止输入后按设置延迟静默保存（表单与自定义参数任一变化都触发）
+// 自动保存：停止输入后按设置延迟静默保存
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   [form, customFields],
@@ -231,23 +187,12 @@ watch(
 
 const autoSaveSeconds = computed(() => String(Number((ui.autoSaveDelay / 1000).toFixed(1))))
 
-async function publishDraft(): Promise<void> {
+async function removePage(): Promise<void> {
   if (!detail.value) return
   try {
-    const meta = await posts.publish(detail.value.id)
-    message.success('草稿已转为正式文章')
-    if (meta) router.replace({ path: '/editor', query: { id: meta.id } })
-  } catch (e) {
-    message.error((e as Error).message)
-  }
-}
-
-async function removePost(): Promise<void> {
-  if (!detail.value) return
-  try {
-    await posts.remove(detail.value.id)
+    await pages.remove(detail.value.id)
     message.success('已删除')
-    router.replace('/posts')
+    router.replace('/pages')
   } catch (e) {
     message.error((e as Error).message)
   }
@@ -260,31 +205,25 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
-// 站点切换时：当前文章属于旧站点，必须清空编辑状态并回文章列表，
-// 否则会把 A 站的文章保存进 B 站（数据串站）；参数侧栏也会随 load 重新提取
+// 站点切换时当前页面属于旧站点，必须清空并回列表，否则会把 A 站页面存进 B 站
 watch(
   () => siteStore.site?.path,
-  (newPath, oldPath) => {
-    if (oldPath === undefined) return // 首次赋值不算切换
-    if (newPath === oldPath) return
-    if (detail.value) {
-      detail.value = null
-      snapshot.value = ''
-      router.replace('/posts')
-      message.info('站点已切换，已返回文章列表')
-    }
+  (path, old) => {
+    if (!old || path === old) return
+    detail.value = null
+    form.value = { title: '', date: '', content: '' }
+    snapshot.value = ''
+    router.replace('/pages')
   }
 )
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
-  posts.load()
-  load()
+  void load()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
-  if (autoSaveTimer) clearTimeout(autoSaveTimer)
 })
 </script>
 
@@ -292,10 +231,8 @@ onBeforeUnmount(() => {
   <div class="editor-page">
     <div class="editor-header">
       <n-space align="center">
-        <span class="title">编辑器</span>
-        <n-tag v-if="detail" :type="detail.kind === 'draft' ? 'warning' : 'success'" size="small" :bordered="false">
-          {{ detail.kind === 'draft' ? '草稿' : '正式文章' }}
-        </n-tag>
+        <span class="title">页面编辑器</span>
+        <n-tag v-if="detail" size="small" :bordered="false">页面</n-tag>
         <n-tag v-if="dirty" type="info" size="small" :bordered="false">未保存</n-tag>
       </n-space>
       <n-space align="center">
@@ -304,7 +241,7 @@ onBeforeUnmount(() => {
           size="small"
           :type="showParams ? 'primary' : 'default'"
           secondary
-          :title="showParams ? '收起文章参数侧栏' : '展开文章参数侧栏'"
+          :title="showParams ? '收起页面参数侧栏' : '展开页面参数侧栏'"
           @click="toggleParams"
         >
           {{ showParams ? '▤ 参数已开' : '▥ 参数已关' }}
@@ -318,14 +255,13 @@ onBeforeUnmount(() => {
         >
           {{ showPreview ? '◨ 预览已开' : '◧ 预览已关' }}
         </n-button>
-        <n-button v-if="detail?.kind === 'draft'" @click="publishDraft">转为正式文章</n-button>
-        <n-popconfirm v-if="detail" @positive-click="removePost">
+        <n-popconfirm v-if="detail" @positive-click="removePage">
           <template #trigger>
             <n-button quaternary type="error">删除</n-button>
           </template>
           删除后移入系统回收站，确定吗？
         </n-popconfirm>
-        <n-button @click="router.push('/posts')">返回列表</n-button>
+        <n-button @click="router.push('/pages')">返回列表</n-button>
         <n-button type="primary" :loading="saving" :disabled="!dirty" @click="save">
           保存（Ctrl+S）
         </n-button>
@@ -338,126 +274,90 @@ onBeforeUnmount(() => {
         :formatted-value="form.date || null"
         type="datetime"
         format="yyyy-MM-dd HH:mm:ss"
-        placeholder="发布日期"
+        placeholder="日期"
         class="date-picker"
         @update:formatted-value="(v: string | null) => (form.date = v ?? '')"
       />
+      <span v-if="detail" class="muted small page-path" :title="detail.id">source/{{ detail.id }}</span>
     </div>
 
-      <div class="editor-body" :class="{ row: showPreview || showParams }">
-        <MarkdownEditor v-model="form.content" :dark="ui.isDark" />
-        <div v-if="showPreview" class="markdown-body" v-html="previewHtml"></div>
+    <div class="editor-body" :class="{ row: showPreview || showParams }">
+      <MarkdownEditor v-model="form.content" :dark="ui.isDark" />
+      <div v-if="showPreview" class="markdown-body" v-html="previewHtml"></div>
 
-        <!-- 文章参数侧栏：分类、标签与自定义 front-matter 字段 -->
-        <aside v-if="showParams" class="params-rail glass">
-          <div class="params-head">
-            <span class="params-title">文章参数</span>
-            <n-button size="tiny" quaternary title="收起参数栏" @click="toggleParams">收起 ›</n-button>
-          </div>
+      <!-- 页面参数侧栏：与文章编辑器一致的「参数名 + 值」卡片 -->
+      <aside v-if="showParams" class="params-rail glass">
+        <div class="params-head">
+          <span class="params-title">页面参数</span>
+          <n-button size="tiny" quaternary title="收起参数栏" @click="toggleParams">收起 ›</n-button>
+        </div>
 
-          <div class="params-scroll">
-            <div class="field-group">
-              <div class="field-label">分类</div>
-              <n-select
-                v-model:value="form.categories"
-                multiple
-                filterable
-                tag
-                clearable
-                size="small"
-                placeholder="输入后回车新建"
-                :options="categoryOptions"
-              />
-            </div>
-
-            <div class="field-group">
-              <div class="field-label">标签</div>
-              <n-select
-                v-model:value="form.tags"
-                multiple
-                filterable
-                tag
-                clearable
-                size="small"
-                placeholder="输入后回车新建"
-                :options="tagOptions"
-              />
-            </div>
-
-            <div class="field-group">
-              <div class="field-label">自定义参数</div>
-              <div v-if="customFields.length" class="custom-list">
-                <div v-for="(f, i) in customFields" :key="f.key" class="custom-item">
-                  <div class="custom-head">
-                    <span class="custom-name" :title="f.key">{{ fieldLabel(f.key) }}</span>
-                    <n-button size="tiny" quaternary type="error" title="移除该参数" @click="removeCustomField(i)">
-                      移除
-                    </n-button>
-                  </div>
-                  <n-input
-                    v-model:value="f.value"
-                    size="small"
-                    type="textarea"
-                    :autosize="{ minRows: 1, maxRows: 4 }"
-                    :placeholder="`${fieldLabel(f.key)} 的值`"
-                  />
+        <div class="params-scroll">
+          <div class="field-group">
+            <div class="field-label">自定义参数</div>
+            <div v-if="customFields.length" class="custom-list">
+              <div v-for="(f, i) in customFields" :key="f.key" class="custom-item">
+                <div class="custom-head">
+                  <span class="custom-name" :title="f.key">{{ fieldLabel(f.key) }}</span>
+                  <n-button size="tiny" quaternary type="error" title="移除该参数" @click="removeCustomField(i)">
+                    移除
+                  </n-button>
                 </div>
-              </div>
-              <div v-else class="muted small">尚未添加自定义参数</div>
-              <n-button size="small" block secondary class="add-param-btn" @click="openAddField">
-                ＋ 添加自定义参数
-              </n-button>
-            </div>
-
-            <div class="field-group">
-              <div class="field-label">其他元数据</div>
-              <div class="meta-list">
-                <div v-for="m in readOnlyMeta" :key="m.key" class="meta-row-item">
-                  <span class="meta-key" :title="m.key">{{ m.key }}</span>
-                  <span class="meta-val" :title="m.value">{{ m.value }}</span>
-                </div>
-                <div v-if="!readOnlyMeta.length" class="muted small">无</div>
+                <n-input
+                  v-model:value="f.value"
+                  size="small"
+                  type="textarea"
+                  :autosize="{ minRows: 1, maxRows: 4 }"
+                  :placeholder="`${fieldLabel(f.key)} 的值`"
+                />
               </div>
             </div>
+            <div v-else class="muted small">尚未添加自定义参数</div>
+            <n-button size="small" block secondary class="add-param-btn" @click="openAddField">
+              ＋ 添加自定义参数
+            </n-button>
           </div>
-        </aside>
+
+          <div class="field-group">
+            <div class="field-label">其他元数据</div>
+            <div class="meta-list">
+              <div v-for="m in readOnlyMeta" :key="m.key" class="meta-row-item">
+                <span class="meta-key" :title="m.key">{{ m.key }}</span>
+                <span class="meta-val" :title="m.value">{{ m.value }}</span>
+              </div>
+              <div v-if="!readOnlyMeta.length" class="muted small">无</div>
+            </div>
+          </div>
+        </div>
+      </aside>
 
       <!-- 收起态：贴边的竖向拉手，比原来的小箭头更易发现和点击 -->
       <button
         v-else
         class="params-open"
         type="button"
-        title="展开文章参数侧栏"
+        title="展开页面参数侧栏"
         @click="toggleParams"
       >
         <n-icon :component="ChevronBackOutline" />
-        <span class="params-open-label">文章参数</span>
+        <span class="params-open-label">页面参数</span>
       </button>
-      </div>
+    </div>
 
     <n-modal v-model:show="showAddField" preset="card" title="添加自定义参数" style="width: 420px">
       <div class="muted small" style="margin-bottom: 10px">
-        参数名即 front-matter 的键名，如 <code>permalink</code>、<code>cover</code>、<code>sticky</code>、<code>comments</code>。
+        参数名即 front-matter 的键名，如 <code>permalink</code>、<code>layout</code>、<code>comments</code>。
       </div>
       <div class="field-inputs">
         <div class="field-col">
           <div class="field-col-label">中文显示名 <span class="muted small">（可选）</span></div>
-          <n-input
-            v-model:value="newFieldLabel"
-            placeholder="如 分类"
-            @keyup.enter="confirmAddField"
-          />
+          <n-input v-model:value="newFieldLabel" placeholder="如 布局" @keyup.enter="confirmAddField" />
         </div>
         <div class="field-col">
           <div class="field-col-label">英文键名 <span class="muted small">（必填）</span></div>
-          <n-input
-            v-model:value="newFieldKey"
-            placeholder="如 category"
-            @keyup.enter="confirmAddField"
-          />
+          <n-input v-model:value="newFieldKey" placeholder="如 layout" @keyup.enter="confirmAddField" />
         </div>
       </div>
-      <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
       <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
       <template #footer>
         <n-space justify="end">
@@ -477,95 +377,215 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* 与文章编辑器保持一致的布局节奏。
+   高度由外层 .main（列向 flex 容器）通过 flex:1 给定，
+   不再用 100vh 计算——否则状态栏会被内容挤出视口底部 */
 .editor-page {
-  /* 高度由外层 .main（列向 flex 容器）通过 flex:1 给定；
-     用 flex:1 而非 height:100%，避免状态栏被内容挤出视口 */
-  flex: 1;
-  min-height: 540px;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 540px;
   padding: 2px 4px 8px;
   gap: 10px;
   box-sizing: border-box;
 }
+
 .editor-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
-.title {
-  font-size: 18px;
+
+.editor-header .title {
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-1);
 }
+
 .meta-row {
   display: flex;
+  align-items: center;
   gap: 10px;
 }
+
 .title-input {
   flex: 1;
+  min-width: 0;
 }
+
 .date-picker {
-  width: 230px;
+  width: 210px;
   flex: none;
 }
+
+.page-path {
+  flex: none;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+
 .editor-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-/* 横向布局：预览或参数侧栏任一开启时生效（侧栏位置不再受预览开关影响） */
+
+/* 横向布局：预览或参数侧栏任一开启时生效 */
 .editor-body.row {
   flex-direction: row;
   gap: 14px;
 }
 
-/* 文章参数侧栏 */
+.editor-body > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-body .markdown-body {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-strong);
+}
+
+/* 参数侧栏 */
 .params-rail {
-  width: 258px;
+  width: 300px;
   flex: none;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-radius: var(--radius);
-  overflow: hidden;
+  padding: 12px;
+  box-sizing: border-box;
 }
+
 .params-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--glass-border);
+  gap: 8px;
+  margin-bottom: 10px;
 }
+
 .params-title {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-1);
 }
+
 .params-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
+
 .field-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.yaml-tip {
+  line-height: 1.6;
+}
+
+.yaml-tip code {
+  font-family: var(--mono);
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+}
+
+.code-editor-wrap {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  overflow: hidden;
+}
+
+.param-editor {
+  height: 220px;
+}
+
+.param-editor.invalid {
+  border-color: var(--danger);
+}
+
+.param-error {
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.param-warn {
+  font-size: 12px;
+  color: var(--warn);
+  line-height: 1.5;
+}
+
+.param-ok {
+  font-size: 12px;
+  color: var(--ok);
+}
+
+.effective-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  color: var(--text-2);
+  cursor: pointer;
 }
+
+.meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-row-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+.meta-key {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  flex: none;
+}
+
+.meta-val {
+  font-size: 12px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 收起态：贴边竖向拉手，悬停点亮，明确可点击 */
 .custom-list {
   display: flex;
   flex-direction: column;
@@ -625,11 +645,13 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--danger);
 }
+
 .meta-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
 .meta-row-item {
   display: flex;
   align-items: center;
@@ -640,17 +662,20 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   background: var(--accent-soft);
 }
+
 .meta-key {
   font-family: var(--mono);
   color: var(--accent);
   flex: none;
 }
+
 .meta-val {
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .params-open {
   flex: none;
   align-self: stretch;
@@ -681,28 +706,21 @@ onBeforeUnmount(() => {
   writing-mode: vertical-rl;
   letter-spacing: 2px;
 }
-.markdown-body {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
-  padding: 4px 16px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  background: var(--glass);
-  backdrop-filter: blur(18px) saturate(1.5);
-  box-shadow: var(--glass-glow);
-}
+
 .status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--text-2);
-  display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
 }
-.hint {
+
+.status-bar .hint {
   color: var(--accent);
 }
-.label {
-  font-size: 13px;
-  color: var(--text-2);
+
+.status-bar .err {
+  color: var(--danger);
 }
 </style>
