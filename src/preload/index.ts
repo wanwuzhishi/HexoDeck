@@ -29,6 +29,16 @@ const api: Api = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   saveAppSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('app:saveSettings', patch),
   openLogFolder: () => ipcRenderer.invoke('app:openLogs'),
+
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggleMaximize'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+  isWindowMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  onWindowMaximized: (cb: (maximized: boolean) => void) => {
+    const handler = (_e: unknown, maximized: boolean): void => cb(maximized)
+    ipcRenderer.on('evt:window-maximized', handler)
+    return () => ipcRenderer.removeListener('evt:window-maximized', handler)
+  },
   checkForUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
   installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
 

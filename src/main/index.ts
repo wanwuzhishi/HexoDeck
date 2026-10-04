@@ -24,13 +24,16 @@ let mainWindow: BrowserWindow | null = null
 let quitting = false
 
 function createWindow(): BrowserWindow {
+  // 窗口底色跟随应用暗色主题：渲染进程首帧之前不会闪出黑边
   const win = new BrowserWindow({
     width: 1360,
     height: 860,
     minWidth: 960,
     minHeight: 640,
     show: false,
-    autoHideMenuBar: true,
+    // 无原生边框：顶部标题栏由渲染进程自绘，与应用玻璃拟态 UI 一致
+    frame: false,
+    backgroundColor: '#0b0f1a',
     icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -39,6 +42,17 @@ function createWindow(): BrowserWindow {
       sandbox: false
     }
   })
+
+  // 无边框窗口默认带菜单栏，显式移除（含 Alt 唤出）
+  win.setMenuBarVisibility(false)
+  win.setMenu(null)
+
+  // 自绘标题栏后仍需把最大化状态同步给渲染进程，用于切换按钮图标
+  const emitMaximized = (): void => {
+    win.webContents.send('evt:window-maximized', win.isMaximized())
+  }
+  win.on('maximize', emitMaximized)
+  win.on('unmaximize', emitMaximized)
 
   win.on('ready-to-show', () => win.show())
 

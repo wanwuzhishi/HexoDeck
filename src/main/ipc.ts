@@ -222,6 +222,31 @@ export function registerIpc(ctx: IpcContext): void {
     else await shell.openPath(app.getPath('userData'))
   })
 
+  // ---- 自绘标题栏的窗口控制（无边框窗口下由渲染进程按钮触发） ----
+
+  /** 取发起调用的窗口；无边框窗口下必须按事件来源定位，不能假定单窗口 */
+  const windowOf = (e: Electron.IpcMainInvokeEvent): BrowserWindow | null =>
+    BrowserWindow.fromWebContents(e.sender)
+
+  ipcMain.handle('window:minimize', async (e) => {
+    windowOf(e)?.minimize()
+  })
+
+  ipcMain.handle('window:toggleMaximize', async (e) => {
+    const win = windowOf(e)
+    if (!win) return
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+    return win.isMaximized()
+  })
+
+  ipcMain.handle('window:close', async (e) => {
+    // 走 close 事件，保留「关闭到托盘」的既有逻辑
+    windowOf(e)?.close()
+  })
+
+  ipcMain.handle('window:isMaximized', async (e) => windowOf(e)?.isMaximized() ?? false)
+
   const requireSite = (): string => {
     if (!currentSite) throw new Error('尚未打开站点')
     return currentSite

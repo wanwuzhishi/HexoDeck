@@ -1,22 +1,28 @@
 <script setup lang="ts">
-import { computed, h, onMounted, watchEffect } from 'vue'
+import { computed, h, onMounted, ref, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { darkTheme, dateZhCN, NIcon, zhCN } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import {
+  ChevronBackOutline,
+  ChevronForwardOutline,
+  ContrastOutline,
   DocumentTextOutline,
   EyeOutline,
   HomeOutline,
+  MoonOutline,
   ReaderOutline,
   RocketOutline,
   SettingsOutline,
-  StatsChartOutline
+  StatsChartOutline,
+  SunnyOutline
 } from '@vicons/ionicons5'
 import { darkOverrides, lightOverrides } from './theme'
 import { useSiteStore } from './stores/site'
 import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
 import InfoRail from './components/InfoRail.vue'
+import TitleBar from './components/TitleBar.vue'
 import appIcon from './assets/app-icon.png'
 import { message, setDiscreteTheme } from './composables/message'
 
@@ -25,6 +31,9 @@ const router = useRouter()
 const siteStore = useSiteStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
+
+/** 窗口最大化状态：由标题栏同步，用于让外壳在最大化时贴边铺满 */
+const winMaximized = ref(false)
 
 // 主题：body 类（驱动 CSS 变量）+ 独立 message 弹层主题
 watchEffect(() => {
@@ -52,18 +61,29 @@ const activeKey = computed(() =>
 
 /** 主题按钮：三态循环 亮色 → 暗色 → 跟随系统 */
 const themeButtonIcon = computed(() => {
-  if (ui.themeMode === 'system') return '◐'
-  return ui.themeMode === 'dark' ? '☾' : '☀'
+  if (ui.themeMode === 'system') return ContrastOutline
+  return ui.themeMode === 'dark' ? MoonOutline : SunnyOutline
 })
+
+/** 按钮上直接显示当前模式。侧栏仅 208px、两个按钮并排，
+ *  每个按钮扣掉图标与间距后只剩约 45px 文字位——「跟随系统」4 字放不下会顶出边框，
+ *  因此这里一律用 2 字标签，完整名称放在 tooltip 里 */
+const themeButtonLabel = computed(
+  () => ({ light: '亮色', dark: '暗色', system: '跟随' })[ui.themeMode]
+)
 
 const themeButtonTitle = computed(() => {
-  const label = { light: '亮色', dark: '暗色', system: '跟随系统' }[ui.themeMode]
+  const full = { light: '亮色', dark: '暗色', system: '跟随系统' }[ui.themeMode]
   const next = { light: '暗色', dark: '跟随系统', system: '亮色' }[ui.themeMode]
-  return `当前：${label}（点击切换到${next}）`
+  return `当前：${full}（点击切换到${next}）`
 })
 
-// 编辑器页聚焦写作，隐藏右侧信息栏
-const showRail = computed(() => route.name !== 'editor')
+/** 侧栏折叠按钮：图标 + 文案，收起态只留图标 */
+const navToggleIcon = computed(() => (ui.navCollapsed ? ChevronForwardOutline : ChevronBackOutline))
+
+// 编辑器聚焦写作、站点页本身已是全宽仪表盘（右栏三卡与页面内容完全重复），
+// 这两个页面隐藏右侧信息栏
+const showRail = computed(() => route.name !== 'editor' && route.name !== 'site')
 
 function onMenu(key: string): void {
   router.push(key)
@@ -89,7 +109,9 @@ onMounted(async () => {
     :date-locale="dateZhCN"
   >
     <n-message-provider>
-      <div class="shell">
+      <div class="app-root" :class="{ maximized: winMaximized }">
+        <TitleBar @maximized-change="winMaximized = $event" />
+        <div class="shell">
         <aside class="sider glass" :class="{ collapsed: ui.navCollapsed }">
           <div class="brand">
             <img class="logo" :src="appIcon" alt="HexoDeck" />
@@ -105,27 +127,37 @@ onMounted(async () => {
             @update:value="onMenu"
           />
           <div class="sider-foot">
-            <n-button
-              quaternary
-              circle
-              :size="ui.navCollapsed ? 'tiny' : 'small'"
-              :title="themeButtonTitle"
-              @click="ui.cycleTheme"
-            >
-              {{ themeButtonIcon }}
-            </n-button>
-            <span v-if="!ui.navCollapsed" class="foot-site" :title="siteStore.site?.path">
-              {{ siteStore.site?.name ?? '未打开站点' }}
-            </span>
-            <n-button
-              quaternary
-              circle
-              :size="ui.navCollapsed ? 'tiny' : 'small'"
-              :title="ui.navCollapsed ? '展开导航' : '折叠导航'"
-              @click="ui.toggleNav"
-            >
-              {{ ui.navCollapsed ? '»' : '«' }}
-            </n-button>
+            <!-- 当前站点：放在按钮上方，避免与两个操作按钮挤在一行 -->
+            <div v-if="!ui.navCollapsed" class="foot-site" :title="siteStore.site?.path">
+              <span class="foot-site-dot" :class="{ on: !!siteStore.site }"></span>
+              <span class="foot-site-name">{{ siteStore.site?.name ?? '未打开站点' }}</span>
+            </div>
+            <div class="foot-actions">
+              <n-button
+                class="foot-btn"
+                size="small"
+                secondary
+                :title="themeButtonTitle"
+                @click="ui.cycleTheme"
+              >
+                <template #icon>
+                  <n-icon :component="themeButtonIcon" />
+                </template>
+                <span v-if="!ui.navCollapsed" class="foot-btn-text">{{ themeButtonLabel }}</span>
+              </n-button>
+              <n-button
+                class="foot-btn"
+                size="small"
+                secondary
+                :title="ui.navCollapsed ? '展开侧边栏' : '收起侧边栏'"
+                @click="ui.toggleNav"
+              >
+                <template #icon>
+                  <n-icon :component="navToggleIcon" />
+                </template>
+                <span v-if="!ui.navCollapsed" class="foot-btn-text">收起</span>
+              </n-button>
+            </div>
           </div>
         </aside>
 
@@ -134,17 +166,32 @@ onMounted(async () => {
         </main>
 
         <InfoRail v-if="showRail" class="rail" />
+        </div>
       </div>
     </n-message-provider>
   </n-config-provider>
 </template>
 
 <style scoped>
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* 最大化时整体贴边：标题栏与内容都不再留外边距 */
+.app-root.maximized .shell {
+  padding: 0;
+}
+
+/* 标题栏与主区域之间的纵向间距由标题栏自身的下外边距提供（14px），
+   这里不再重复留白，避免出现 12+14 的双重空隙 */
 .shell {
+  flex: 1;
+  min-height: 0;
   display: flex;
   gap: 12px;
-  height: 100vh;
-  padding: 12px;
+  padding: 0 12px 12px;
   box-sizing: border-box;
 }
 
@@ -252,25 +299,89 @@ onMounted(async () => {
 
 .sider-foot {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--glass-border);
 }
 
-/* 收起态：底部按钮居中 */
-.sider.collapsed .sider-foot {
-  justify-content: center;
-}
-
 .foot-site {
-  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-size: 12px;
   color: var(--text-2);
+}
+
+/* 站点状态点：已连接时点亮，未打开时保持暗淡 */
+.foot-site-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.foot-site-dot.on {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
+
+.foot-site-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 两个操作按钮：等宽并排，带描边与图标，比原来的裸文字更醒目 */
+.foot-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.foot-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+/* naive-ui 默认给按钮 0 14px 内边距；侧栏只有 208px，两个按钮并排时
+   这点内边距会把文字挤到边框外。用 :deep 压掉内边距，让内容自己撑满。 */
+.foot-btn :deep(.n-button__content) {
+  padding: 0;
+  min-width: 0;
+}
+
+/* 图标从默认 18px 收到 14px：按钮可用宽度约 91px，
+   图标+间距占 20px，留给文字的宽度才能放下 2 字标签 */
+.foot-btn :deep(.n-button__icon),
+.foot-btn :deep(.n-icon) {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.foot-btn :deep(.n-button__border),
+.foot-btn :deep(.n-button__state-border) {
+  border-radius: 8px;
+}
+
+/* 标签过长时省略而不是溢出边框 */
+.foot-btn-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+/* 收起态：按钮只留图标并居中 */
+.sider.collapsed .foot-actions {
+  flex-direction: column;
+}
+
+.sider.collapsed .foot-btn {
+  flex: none;
+  width: 100%;
 }
 
 .main {

@@ -283,6 +283,14 @@ export interface Api {
   getAppInfo(): Promise<AppInfo>
   saveAppSettings(patch: Partial<AppSettings>): Promise<Result<AppSettings>>
   openLogFolder(): Promise<void>
+
+  /** 自绘标题栏的窗口控制（无边框窗口用） */
+  minimizeWindow(): Promise<void>
+  toggleMaximizeWindow(): Promise<boolean>
+  closeWindow(): Promise<void>
+  isWindowMaximized(): Promise<boolean>
+  /** 最大化状态变化（由主进程推送，用于切换按钮图标） */
+  onWindowMaximized(cb: (maximized: boolean) => void): () => void
   /** 手动检查更新（结果通过 onUpdateStatus 推送） */
   checkForUpdate(): Promise<void>
   /** 退出并安装已下载的更新 */
