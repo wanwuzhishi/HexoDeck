@@ -213,6 +213,15 @@ async function main(): Promise<void> {
   await savePost(tmpSite, cf.id, { extra: { title: 'HACKED', date: 'HACKED' } })
   const cfGuard = await readPost(tmpSite, cf.id)
   check('内置字段不被自定义参数覆盖', cfGuard.title === '自定义字段测试', cfGuard.title)
+
+  // 开关式参数落为 YAML 布尔（模板里字符串 'false' 是真值，必须是布尔才正确）
+  await savePost(tmpSite, cf.id, { extra: { comments: true, sticky: false } })
+  const cfBool = await readPost(tmpSite, cf.id)
+  check(
+    '布尔参数写入为 YAML 布尔',
+    cfBool.frontMatter.comments === true && cfBool.frontMatter.sticky === false,
+    JSON.stringify(cfBool.frontMatter)
+  )
   await deletePost(tmpSite, cf.id, async () => { throw new Error('no trash') })
 
   // 10.5 页面（source/ 下非文章目录的 markdown）

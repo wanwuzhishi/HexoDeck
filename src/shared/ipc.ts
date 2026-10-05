@@ -44,7 +44,7 @@ export interface PostPatch {
    * 自定义 front-matter 字段：写入时合并到现有元数据。
    * value 为 null 表示删除该键。
    */
-  extra?: Record<string, string | null>
+  extra?: Record<string, string | boolean | null>
 }
 
 export interface SiteInfo {
@@ -93,7 +93,7 @@ export interface PagePatch {
    * 自定义 front-matter 字段：写入时合并到现有元数据。
    * value 为 null 表示删除该键。
    */
-  extra?: Record<string, string | null>
+  extra?: Record<string, string | boolean | null>
 }
 
 export interface RecentSite {
@@ -145,7 +145,7 @@ export interface CollectionPostPatch {
   date?: string
   content?: string
   /** 自定义 front-matter 字段；value 为 null 表示删除该键 */
-  extra?: Record<string, string | null>
+  extra?: Record<string, string | boolean | null>
 }
 
 /** 站点 _config.yml 表单化配置 */

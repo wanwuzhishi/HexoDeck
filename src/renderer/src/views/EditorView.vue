@@ -7,6 +7,8 @@ import {
   NIcon,
   NInput,
   NPopconfirm,
+  NRadioButton,
+  NRadioGroup,
   NSelect,
   NSpace,
   NTag
@@ -19,7 +21,15 @@ import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
 import { countWords } from '../composables/wordcount'
-import { FIELD_NAME_RE, useCustomFields } from '../composables/customFields'
+import {
+  FIELD_NAME_RE,
+  switchIsOn,
+  switchOffOf,
+  switchOnOf,
+  switchToggle,
+  useCustomFields,
+  type CustomFieldType
+} from '../composables/customFields'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import type { PostDetail } from '@shared/ipc'
 
@@ -75,11 +85,17 @@ const {
 const showAddField = ref(false)
 const newFieldKey = ref('')
 const newFieldLabel = ref('')
+const newFieldType = ref<CustomFieldType>('kv')
+const newFieldOn = ref('')
+const newFieldOff = ref('')
 const addFieldError = ref('')
 
 function openAddField(): void {
   newFieldKey.value = ''
   newFieldLabel.value = ''
+  newFieldType.value = 'kv'
+  newFieldOn.value = ''
+  newFieldOff.value = ''
   addFieldError.value = ''
   showAddField.value = true
 }
@@ -100,8 +116,12 @@ function confirmAddField(): void {
     return
   }
 
-  // 参数值属于每篇文章各自的内容，这里只登记字段名，值留空由用户填写
-  addField(key, newFieldLabel.value.trim())
+  // 参数值属于每篇文章各自的内容，这里只登记字段名与类型；开关式登记选中/取消写入值
+  addField(key, newFieldLabel.value.trim(), {
+    type: newFieldType.value,
+    onValue: newFieldOn.value.trim() || undefined,
+    offValue: newFieldOff.value.trim() || undefined
+  })
   showAddField.value = false
 }
 
@@ -395,7 +415,17 @@ onBeforeUnmount(() => {
                       移除
                     </n-button>
                   </div>
+                  <!-- 开关式参数：可点击勾选的方框，写入选中/取消值 -->
+                  <n-checkbox
+                    v-if="f.type === 'switch'"
+                    :checked="switchIsOn(f)"
+                    @update:checked="(v: boolean) => switchToggle(f, v)"
+                  >
+                    {{ switchIsOn(f) ? switchOnOf(f) : switchOffOf(f) }}
+                  </n-checkbox>
+                  <!-- 键值式参数：文本输入 -->
                   <n-input
+                    v-else
                     v-model:value="f.value"
                     size="small"
                     type="textarea"
@@ -458,7 +488,26 @@ onBeforeUnmount(() => {
           />
         </div>
       </div>
-      <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
+      <div class="field-type-row">
+        <div class="field-col-label">参数类型</div>
+        <n-radio-group v-model:value="newFieldType" size="small">
+          <n-radio-button value="kv">键值式</n-radio-button>
+          <n-radio-button value="switch">开关式</n-radio-button>
+        </n-radio-group>
+        <span class="muted small">
+          {{ newFieldType === 'switch' ? '在参数栏显示为可勾选的开关' : '填写任意文本值' }}
+        </span>
+      </div>
+      <div v-if="newFieldType === 'switch'" class="field-inputs switch-values">
+        <div class="field-col">
+          <div class="field-col-label">选中时写入 <span class="muted small">（默认 true）</span></div>
+          <n-input v-model:value="newFieldOn" placeholder="true" />
+        </div>
+        <div class="field-col">
+          <div class="field-col-label">取消时写入 <span class="muted small">（默认 false）</span></div>
+          <n-input v-model:value="newFieldOff" placeholder="false" />
+        </div>
+      </div>
       <div v-if="addFieldError" class="add-field-error">{{ addFieldError }}</div>
       <template #footer>
         <n-space justify="end">
@@ -604,6 +653,24 @@ onBeforeUnmount(() => {
 }
 
 /* 添加参数弹窗：中文显示名（左）/ 英文键名（右） */
+/* 参数类型选择行（弹窗内） */
+.field-type-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.switch-values {
+  margin-top: 10px;
+}
+
+/* 开关式参数卡片：勾选框与卡片内边距协调 */
+.custom-item :deep(.n-checkbox) {
+  margin: 2px 0;
+}
+
 .field-inputs {
   display: grid;
   grid-template-columns: 1fr 1fr;
