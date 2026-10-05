@@ -3,6 +3,7 @@ import type {
   Api,
   AppSettings,
   BuildCommand,
+  CollectionPostPatch,
   ConfigPathKind,
   DeployConfig,
   PageCreateOptions,
@@ -57,6 +58,23 @@ const api: Api = {
   createPage: (options: PageCreateOptions) => ipcRenderer.invoke('page:create', options),
   savePage: (id: string, patch: PagePatch) => ipcRenderer.invoke('page:save', id, patch),
   deletePage: (id: string) => ipcRenderer.invoke('page:delete', id),
+
+  listCollections: () => ipcRenderer.invoke('coll:list'),
+  pickCollectionDir: () => ipcRenderer.invoke('coll:pickDir'),
+  addCollection: (name: string, icon: string, dir: string) =>
+    ipcRenderer.invoke('coll:add', name, icon, dir),
+  updateCollection: (id: string, patch: { name?: string; icon?: string }) =>
+    ipcRenderer.invoke('coll:update', id, patch),
+  removeCollection: (id: string) => ipcRenderer.invoke('coll:remove', id),
+  listCollectionPosts: (collectionId: string) => ipcRenderer.invoke('coll:postList', collectionId),
+  readCollectionPost: (collectionId: string, id: string) =>
+    ipcRenderer.invoke('coll:postRead', collectionId, id),
+  createCollectionPost: (collectionId: string, title: string) =>
+    ipcRenderer.invoke('coll:postCreate', collectionId, title),
+  saveCollectionPost: (collectionId: string, id: string, patch: CollectionPostPatch) =>
+    ipcRenderer.invoke('coll:postSave', collectionId, id, patch),
+  deleteCollectionPost: (collectionId: string, id: string) =>
+    ipcRenderer.invoke('coll:postDelete', collectionId, id),
 
   runBuild: (command: BuildCommand) => ipcRenderer.invoke('build:run', command),
   startPreview: (includeDrafts: boolean) => ipcRenderer.invoke('preview:start', includeDrafts),

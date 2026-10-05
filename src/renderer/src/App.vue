@@ -1,7 +1,18 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref, watchEffect } from 'vue'
+import { computed, h, onMounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { darkTheme, dateZhCN, NIcon, zhCN } from 'naive-ui'
+import {
+  darkTheme,
+  dateZhCN,
+  NButton,
+  NForm,
+  NFormItem,
+  NIcon,
+  NInput,
+  NModal,
+  NSpace,
+  zhCN
+} from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import {
   ChevronBackOutline,
@@ -23,6 +34,7 @@ import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
 import InfoRail from './components/InfoRail.vue'
 import TitleBar from './components/TitleBar.vue'
+import { useCollectionsStore, COLLECTION_ICONS } from './stores/collections'
 import appIcon from './assets/app-icon.png'
 import { message, setDiscreteTheme } from './composables/message'
 
@@ -45,19 +57,37 @@ watchEffect(() => {
 const renderIcon = (icon: unknown) => (): ReturnType<typeof h> =>
   h(NIcon, null, { default: () => h(icon as never) })
 
-const menuOptions: MenuOption[] = [
+/** 文集图标用 emoji 渲染 */
+const renderEmoji = (emoji: string) => (): ReturnType<typeof h> =>
+  h('span', { class: 'menu-emoji', title: '' }, emoji)
+
+const collections = useCollectionsStore()
+
+/** 内置菜单 + 用户自定义文集（名称限 8 字防溢出）+「新建文集」入口 */
+const menuOptions = computed<MenuOption[]>(() => [
   { label: '站点', key: '/', icon: renderIcon(HomeOutline) },
   { label: '文章', key: '/posts', icon: renderIcon(DocumentTextOutline) },
   { label: '页面', key: '/pages', icon: renderIcon(ReaderOutline) },
+  ...collections.defs.map<MenuOption>((c) => ({
+    label: () => h('span', { class: 'menu-coll-label', title: c.name }, c.name),
+    key: `/collection?id=${c.id}`,
+    icon: renderEmoji(c.icon)
+  })),
+  { label: '＋ 新建文集', key: '/new-collection', icon: renderEmoji('➕') },
   { label: '统计', key: '/stats', icon: renderIcon(StatsChartOutline) },
   { label: '预览', key: '/preview', icon: renderIcon(EyeOutline) },
   { label: '发布', key: '/publish', icon: renderIcon(RocketOutline) },
   { label: '设置', key: '/settings', icon: renderIcon(SettingsOutline) }
-]
+])
 
-const activeKey = computed(() =>
-  route.path.startsWith('/editor') ? '/posts' : route.path.startsWith('/page-editor') ? '/pages' : route.path
-)
+const activeKey = computed(() => {
+  if (route.path === '/collection') return `/collection?id=${String(route.query.id ?? '')}`
+  if (route.path === '/collection-editor')
+    return `/collection?id=${String(route.query.collection ?? '')}`
+  if (route.path.startsWith('/editor')) return '/posts'
+  if (route.path.startsWith('/page-editor')) return '/pages'
+  return route.path
+})
 
 /** 主题按钮：三态循环 亮色 → 暗色 → 跟随系统 */
 const themeButtonIcon = computed(() => {
@@ -86,7 +116,56 @@ const navToggleIcon = computed(() => (ui.navCollapsed ? ChevronForwardOutline : 
 const showRail = computed(() => route.name !== 'editor' && route.name !== 'site')
 
 function onMenu(key: string): void {
+  if (key === '/new-collection') {
+    openCollDialog()
+    return
+  }
   router.push(key)
+}
+
+// ---------- 新建文集弹窗（名称 + 图标 + 站点根目录内的文件夹） ----------
+const ICON_CHOICES = COLLECTION_ICONS
+const showCollDialog = ref(false)
+const collSaving = ref(false)
+const collForm = ref({ name: '', icon: COLLECTION_ICONS[0], dir: '' })
+const collDirError = ref('')
+
+function openCollDialog(): void {
+  if (!siteStore.site) {
+    message.warning('请先打开站点')
+    return
+  }
+  collForm.value = { name: '', icon: COLLECTION_ICONS[0], dir: '' }
+  collDirError.value = ''
+  showCollDialog.value = true
+}
+
+async function pickCollDir(): Promise<void> {
+  collDirError.value = ''
+  const r = await window.api.pickCollectionDir()
+  if (r.ok && r.data) collForm.value.dir = r.data.dir
+  else if (r.error) collDirError.value = r.error
+}
+
+async function createCollection(): Promise<void> {
+  if (!collForm.value.name.trim()) {
+    message.warning('请填写文集名称')
+    return
+  }
+  if (!collForm.value.dir) {
+    message.warning('请选择文集目录')
+    return
+  }
+  collSaving.value = true
+  try {
+    await collections.add(collForm.value.name, collForm.value.icon, collForm.value.dir)
+    showCollDialog.value = false
+    message.success(`文集「${collForm.value.name.trim()}」已创建`)
+  } catch (e) {
+    message.error((e as Error).message)
+  } finally {
+    collSaving.value = false
+  }
 }
 
 onMounted(async () => {
@@ -98,7 +177,17 @@ onMounted(async () => {
   workspace.init()
   const r = await siteStore.init()
   if (r && !r.ok) message.error(`自动打开上次站点失败：${r.error ?? '未知错误'}`)
+  // 文集按站点隔离：站点就绪后加载（未打开站点时列表为空）
+  await collections.load()
 })
+
+// 站点切换后重载文集（文集定义按站点路径分组存储）
+watch(
+  () => siteStore.site?.path,
+  () => {
+    void collections.load()
+  }
+)
 </script>
 
 <template>
@@ -168,6 +257,53 @@ onMounted(async () => {
         <InfoRail v-if="showRail" class="rail" />
         </div>
       </div>
+
+      <!-- 新建文集：名称 + 图标 + 站点根目录内的文件夹 -->
+      <n-modal v-model:show="showCollDialog" preset="card" title="新建文集" style="width: 480px">
+        <n-form label-placement="left" :label-width="76">
+          <n-form-item label="名称">
+            <n-input
+              v-model:value="collForm.name"
+              maxlength="8"
+              show-count
+              placeholder="最多 8 个字，如：笔记、随笔"
+            />
+          </n-form-item>
+          <n-form-item label="图标">
+            <div class="icon-picker">
+              <button
+                v-for="ic in ICON_CHOICES"
+                :key="ic"
+                type="button"
+                class="icon-choice"
+                :class="{ active: collForm.icon === ic }"
+                @click="collForm.icon = ic"
+              >
+                {{ ic }}
+              </button>
+            </div>
+          </n-form-item>
+          <n-form-item label="目录">
+            <n-space :size="8" align="center" style="width: 100%">
+              <n-button secondary @click="pickCollDir">选择文件夹</n-button>
+              <span class="coll-dir" :title="collForm.dir">
+                {{ collForm.dir ? `站点内：${collForm.dir}` : '须为站点根目录内的文件夹' }}
+              </span>
+            </n-space>
+          </n-form-item>
+        </n-form>
+        <div v-if="collDirError" class="coll-error">{{ collDirError }}</div>
+        <div class="muted small coll-tip">
+          文集目录须位于站点根目录内（如 source/notes）。文集中的 Markdown 文件在此集中管理，
+          入口名称与图标随时可在文集页修改。
+        </div>
+        <template #footer>
+          <n-space justify="end">
+            <n-button @click="showCollDialog = false">取消</n-button>
+            <n-button type="primary" :loading="collSaving" @click="createCollection">创建</n-button>
+          </n-space>
+        </template>
+      </n-modal>
     </n-message-provider>
   </n-config-provider>
 </template>
@@ -382,6 +518,73 @@ onMounted(async () => {
 .sider.collapsed .foot-btn {
   flex: none;
   width: 100%;
+}
+
+/* 文集菜单项：emoji 图标与名称截断 */
+.menu-emoji {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.sider :deep(.menu-coll-label) {
+  display: inline-block;
+  max-width: 108px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* 新建文集弹窗 */
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.icon-choice {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.icon-choice:hover {
+  background: var(--accent-soft);
+}
+
+.icon-choice.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: var(--accent-glow);
+}
+
+.coll-dir {
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.coll-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.coll-tip {
+  margin-top: 10px;
+  line-height: 1.7;
 }
 
 .main {

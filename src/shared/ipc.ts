@@ -115,6 +115,39 @@ export interface Result<T = undefined> {
   data?: T
 }
 
+/** 自定义文集：侧栏入口（名称/图标可自定义）+ 站点根目录内的一个文章目录 */
+export interface CollectionDef {
+  id: string
+  /** 侧栏显示名（限 8 字以内） */
+  name: string
+  /** 侧栏图标（预置 emoji） */
+  icon: string
+  /** 相对站点根目录的 posix 路径，如 source/notes */
+  dir: string
+}
+
+export interface CollectionPostMeta {
+  /** 相对文集目录的 posix 路径，如 '2026/notes-1.md' */
+  id: string
+  title: string
+  date: string
+  wordCount: number
+}
+
+export interface CollectionPostDetail extends CollectionPostMeta {
+  raw: string
+  content: string
+  frontMatter: Record<string, unknown>
+}
+
+export interface CollectionPostPatch {
+  title?: string
+  date?: string
+  content?: string
+  /** 自定义 front-matter 字段；value 为 null 表示删除该键 */
+  extra?: Record<string, string | null>
+}
+
 /** 站点 _config.yml 表单化配置 */
 export interface DeployConfig {
   type: string
@@ -316,6 +349,20 @@ export interface Api {
   createPage(options: PageCreateOptions): Promise<Result<PageMeta>>
   savePage(id: string, patch: PagePatch): Promise<Result>
   deletePage(id: string): Promise<Result>
+
+  /** 自定义文集：按站点记忆的侧栏入口（名称/图标可自定义，目录限站点根内） */
+  listCollections(): Promise<CollectionDef[]>
+  /** 弹出目录选择器（限站点根目录内），返回站点内相对路径 */
+  pickCollectionDir(): Promise<Result<{ dir: string } | null>>
+  addCollection(name: string, icon: string, dir: string): Promise<Result<CollectionDef[]>>
+  updateCollection(id: string, patch: { name?: string; icon?: string }): Promise<Result<CollectionDef[]>>
+  removeCollection(id: string): Promise<Result<CollectionDef[]>>
+  /** 文集文章 CRUD（id 为相对文集目录的路径） */
+  listCollectionPosts(collectionId: string): Promise<CollectionPostMeta[]>
+  readCollectionPost(collectionId: string, id: string): Promise<Result<CollectionPostDetail>>
+  createCollectionPost(collectionId: string, title: string): Promise<Result<CollectionPostMeta>>
+  saveCollectionPost(collectionId: string, id: string, patch: CollectionPostPatch): Promise<Result>
+  deleteCollectionPost(collectionId: string, id: string): Promise<Result>
 
   runBuild(command: BuildCommand): Promise<BuildResult>
   startPreview(includeDrafts: boolean): Promise<Result<string>>

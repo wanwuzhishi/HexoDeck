@@ -1,12 +1,14 @@
 import { promises as fs } from 'fs'
 import { join } from 'path'
-import type { AppSettings, RecentSite } from '@shared/ipc'
+import type { AppSettings, CollectionDef, RecentSite } from '@shared/ipc'
 
 export interface AppConfigState {
   recentSites: RecentSite[]
   settings: AppSettings
   /** 用户指定的配置文件路径记忆（键见 siteConfigKey/themeConfigKey） */
   configPaths: Record<string, string>
+  /** 自定义文集（侧栏入口），按站点路径分组 */
+  collections: Record<string, CollectionDef[]>
 }
 
 /** 站点配置文件（_config.yml）路径记忆键 */
@@ -37,10 +39,11 @@ export class AppConfig {
       this.cache = {
         recentSites: parsed.recentSites ?? [],
         settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
-        configPaths: parsed.configPaths ?? {}
+        configPaths: parsed.configPaths ?? {},
+        collections: parsed.collections ?? {}
       }
     } catch {
-      this.cache = { recentSites: [], settings: { ...DEFAULT_SETTINGS }, configPaths: {} }
+      this.cache = { recentSites: [], settings: { ...DEFAULT_SETTINGS }, configPaths: {}, collections: {} }
     }
     return this.cache
   }
@@ -60,6 +63,45 @@ export class AppConfig {
     if (!(key in state.configPaths)) return
     delete state.configPaths[key]
     await this.write(state)
+  }
+
+  // ---- 自定义文集 ----
+
+  async listCollections(siteDir: string): Promise<CollectionDef[]> {
+    return (await this.read()).collections[siteDir] ?? []
+  }
+
+  async addCollection(siteDir: string, def: CollectionDef): Promise<CollectionDef[]> {
+    const state = await this.read()
+    const list = state.collections[siteDir] ?? []
+    if (list.some((c) => c.id === def.id)) throw new Error('文集标识重复')
+    if (list.some((c) => c.dir === def.dir)) throw new Error('该目录已绑定其他文集')
+    state.collections[siteDir] = [...list, def]
+    await this.write(state)
+    return state.collections[siteDir]
+  }
+
+  async updateCollection(
+    siteDir: string,
+    id: string,
+    patch: { name?: string; icon?: string }
+  ): Promise<CollectionDef[]> {
+    const state = await this.read()
+    const list = state.collections[siteDir] ?? []
+    const target = list.find((c) => c.id === id)
+    if (!target) throw new Error('文集不存在')
+    if (patch.name !== undefined) target.name = patch.name
+    if (patch.icon !== undefined) target.icon = patch.icon
+    await this.write(state)
+    return list
+  }
+
+  async removeCollection(siteDir: string, id: string): Promise<CollectionDef[]> {
+    const state = await this.read()
+    const list = state.collections[siteDir] ?? []
+    state.collections[siteDir] = list.filter((c) => c.id !== id)
+    await this.write(state)
+    return state.collections[siteDir]
   }
 
   async addRecentSite(path: string, name: string): Promise<void> {

@@ -1,10 +1,11 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { existsSync } from 'fs'
 import { appendFile, readFile } from 'fs/promises'
-import { dirname, join } from 'path'
+import { dirname, join, relative, resolve, sep } from 'path'
 import type {
   AppSettings,
   BuildCommand,
+  CollectionPostPatch,
   ConfigPathInfo,
   ConfigPathKind,
   PageCreateOptions,
@@ -42,7 +43,18 @@ import {
   readPage,
   savePage
 } from './services/page-service'
-import { clearSiteIcon, saveImage, saveSiteIcon } from './services/asset-service'
+import {
+  clearSiteIcon,
+  saveImage,
+  saveSiteIcon
+} from './services/asset-service'
+import {
+  createCollectionPost,
+  deleteCollectionPost,
+  listCollectionPosts,
+  readCollectionPost,
+  saveCollectionPost
+} from './services/collection-service'
 import { installThemeFromArchive, isArchive } from './services/theme-archive-service'
 import { collectStats } from './services/stats-service'
 import {
@@ -346,6 +358,166 @@ export function registerIpc(ctx: IpcContext): void {
       return { ok: false, error: (e as Error).message }
     }
   })
+
+  // ---- 自定义文集（按站点记忆的侧栏入口 + 站点根目录内的文章目录） ----
+
+  /** 名字（1-8 字）与图标入口的合法性校验 */
+  const validCollName = (name: string): string | null => {
+    const n = name.trim()
+    if (!n) return '文集名称不能为空'
+    if (n.length > 8) return '文集名称不能超过 8 个字符'
+    return null
+  }
+
+  /** 取当前站点的文集定义；id 不存在时抛错 */
+  const collOf = async (id: string) => {
+    const site = requireSite()
+    const def = (await ctx.config.listCollections(site)).find((c) => c.id === id)
+    if (!def) throw new Error('文集不存在（可能已被移除），请刷新侧栏')
+    return { site, def }
+  }
+
+  /** 把绝对目录转换为站点内 posix 相对路径；不在站点内时返回 null */
+  const dirInsideSite = (siteDir: string, abs: string): string | null => {
+    const root = resolve(siteDir)
+    const target = resolve(abs)
+    if (target === root || !target.startsWith(root + sep)) return null
+    return relative(root, target).split(sep).join('/')
+  }
+
+  ipcMain.handle('coll:list', async () => {
+    try {
+      return currentSite ? await ctx.config.listCollections(currentSite) : []
+    } catch {
+      return []
+    }
+  })
+
+  ipcMain.handle('coll:pickDir', async (): Promise<Result<{ dir: string } | null>> => {
+    try {
+      const site = requireSite()
+      const picked = await dialog.showOpenDialog({
+        title: '选择文集目录（站点根目录内的文件夹）',
+        defaultPath: site,
+        properties: ['openDirectory']
+      })
+      if (picked.canceled || picked.filePaths.length === 0) {
+        return okResult(null)
+      }
+      const dir = dirInsideSite(site, picked.filePaths[0])
+      if (!dir) {
+        return { ok: false, error: '文集目录必须位于站点根目录内' }
+      }
+      return okResult({ dir })
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle(
+    'coll:add',
+    async (_e, name: string, icon: string, dir: string): Promise<Result<import('@shared/ipc').CollectionDef[]>> => {
+      try {
+        const site = requireSite()
+        const nameErr = validCollName(name)
+        if (nameErr) return { ok: false, error: nameErr }
+        const inside = dirInsideSite(site, dir)
+        if (!inside) return { ok: false, error: '文集目录必须位于站点根目录内' }
+        const defs = await ctx.config.addCollection(site, {
+          id: `coll-${Date.now().toString(36)}`,
+          name: name.trim(),
+          icon: icon || '📁',
+          dir: inside
+        })
+        void logLine(`新增文集「${name.trim()}」：${inside}`)
+        return okResult(defs)
+      } catch (e) {
+        return { ok: false, error: (e as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'coll:update',
+    async (_e, id: string, patch: { name?: string; icon?: string }): Promise<Result<import('@shared/ipc').CollectionDef[]>> => {
+      try {
+        const site = requireSite()
+        if (patch.name !== undefined) {
+          const nameErr = validCollName(patch.name)
+          if (nameErr) return { ok: false, error: nameErr }
+        }
+        const defs = await ctx.config.updateCollection(site, id, patch)
+        return okResult(defs)
+      } catch (e) {
+        return { ok: false, error: (e as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle('coll:remove', async (_e, id: string): Promise<Result<import('@shared/ipc').CollectionDef[]>> => {
+    try {
+      const site = requireSite()
+      const defs = await ctx.config.removeCollection(site, id)
+      void logLine('已移除文集（仅移除入口，不删除目录与文件）')
+      return okResult(defs)
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('coll:postList', async (_e, collectionId: string) => {
+    try {
+      const { site, def } = await collOf(collectionId)
+      return listCollectionPosts(site, def)
+    } catch (e) {
+      onLog(`✗ ${(e as Error).message}`)
+      return []
+    }
+  })
+
+  ipcMain.handle('coll:postRead', async (_e, collectionId: string, id: string) => {
+    try {
+      const { site, def } = await collOf(collectionId)
+      return okResult(await readCollectionPost(site, def, id))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('coll:postCreate', async (_e, collectionId: string, title: string) => {
+    try {
+      const { site, def } = await collOf(collectionId)
+      return okResult(await createCollectionPost(site, def, title))
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle(
+    'coll:postSave',
+    async (_e, collectionId: string, id: string, patch: CollectionPostPatch): Promise<Result> => {
+      try {
+        const { site, def } = await collOf(collectionId)
+        await saveCollectionPost(site, def, id, patch)
+        return okResult()
+      } catch (e) {
+        return { ok: false, error: (e as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'coll:postDelete',
+    async (_e, collectionId: string, id: string): Promise<Result> => {
+      try {
+        const { site, def } = await collOf(collectionId)
+        await deleteCollectionPost(site, def, id, (p) => shell.trashItem(p))
+        return okResult()
+      } catch (e) {
+        return { ok: false, error: (e as Error).message }
+      }
+    }
+  )
 
   ipcMain.handle('post:read', async (_e, id: string) => {
     try {

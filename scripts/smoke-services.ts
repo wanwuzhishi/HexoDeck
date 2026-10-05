@@ -16,6 +16,14 @@ import {
 } from '../src/main/services/post-service'
 import { clearSiteIcon, findSiteIcon, saveImage, saveSiteIcon } from '../src/main/services/asset-service'
 import {
+  createCollectionPost,
+  deleteCollectionPost,
+  listCollectionPosts,
+  readCollectionPost,
+  saveCollectionPost
+} from '../src/main/services/collection-service'
+import type { CollectionDef } from '../src/shared/ipc'
+import {
   createPage,
   deletePage,
   listPages,
@@ -84,6 +92,14 @@ async function main(): Promise<void> {
   const list2 = await listPosts(siteDir)
   check('列表包含新草稿', list2.some((p) => p.id === created.id))
 
+  // 6.55 全文搜索（正文命中 + 摘录）：搜刚创建的草稿正文，不依赖真实站点文章内容
+  const hits = await searchPosts(siteDir, 'Hello from HexoDeck')
+  check(
+    '全文搜索正文命中冒烟草稿',
+    hits.some((h) => h.id === created.id && h.snippet?.includes('Hello')),
+    `${hits.length} 个命中`
+  )
+
   // 6. 删除草稿（测试回退路径：无回收站时直接删除）
   await deletePost(siteDir, created.id, async () => {
     throw new Error('测试环境无回收站')
@@ -100,14 +116,6 @@ async function main(): Promise<void> {
   const imgStat = await fs.stat(imgPath).catch(() => null)
   check('图片已写入 source/images', !!imgStat && imgStat.size > 0)
   if (imgStat) await fs.rm(imgPath)
-
-  // 6.6 全文搜索（正文命中 + 摘录）
-  const hits = await searchPosts(siteDir, 'Welcome to')
-  check(
-    '全文搜索正文命中 Hello World',
-    hits.some((h) => h.id.includes('hello-world') && h.snippet?.includes('Welcome')),
-    `${hits.length} 个命中`
-  )
 
   // 9. 站点配置 / 主题 / 插件服务（在临时站点验证，不触碰真实站点配置）
   const tmpParent = resolve('.tmp/smoke-sites')
@@ -222,6 +230,29 @@ async function main(): Promise<void> {
   )
   check('页面内置 title 生效', pageDetail.title === '关于', pageDetail.title)
 
+  // 新建页面逻辑：路径即文件夹，contact → source/contact/index.md
+  const flat = await createPage(tmpSite, { title: '留言板', path: 'contact' })
+  check('路径即文件夹（contact → contact/index.md）', flat.id === 'contact/index.md', flat.id)
+  check(
+    '同名文件夹内为 index.md',
+    !!(await fs.stat(join(tmpSite, 'source', 'contact', 'index.md')).catch(() => null))
+  )
+
+  // 标题与参数重合：自动去重（表单标题优先，参数里的 date 沿用），不提示
+  const dedup = await createPage(tmpSite, {
+    title: '关于2',
+    path: 'about2',
+    frontMatterYaml: 'title: YAML标题\ndate: 2020-01-01\nlayout: page\n'
+  })
+  const dedupDetail = await readPage(tmpSite, dedup.id)
+  check('标题与参数重合自动去重（表单优先）', dedupDetail.title === '关于2', dedupDetail.title)
+  check(
+    '参数中的 date 沿用（不被自动日期覆盖）',
+    String(dedupDetail.frontMatter.date).includes('2020-01-01'),
+    String(dedupDetail.frontMatter.date)
+  )
+  check('去重不影响其余参数', dedupDetail.frontMatter.layout === 'page')
+
   await savePage(tmpSite, page.id, {
     content: '# 关于本站\n\n这里是 HexoDeck 冒烟测试页面。',
     extra: { permalink: 'about-me', comments: null }
@@ -288,6 +319,46 @@ async function main(): Promise<void> {
   )
 
   await fs.rm(tmpParent, { recursive: true, force: true })
+
+  // 10.65 自定义文集（站点根目录内的文章目录）
+  const coll: CollectionDef = { id: 'coll-test', name: '学习笔记', icon: '📚', dir: 'source/notes' }
+  const cp = await createCollectionPost(tmpSite, coll, '学习笔记一')
+  check('文集文章创建于文集目录', cp.id === '学习笔记一.md', cp.id)
+  check(
+    '文集文件真实落盘',
+    !!(await fs.stat(join(tmpSite, 'source', 'notes', '学习笔记一.md')).catch(() => null))
+  )
+  const cpr = await readCollectionPost(tmpSite, coll, cp.id)
+  check('文集文章标题日期', cpr.title === '学习笔记一' && !!cpr.date)
+  await saveCollectionPost(tmpSite, coll, cp.id, { content: '# 笔记正文', extra: { mood: '好' } })
+  const cpr2 = await readCollectionPost(tmpSite, coll, cp.id)
+  check('文集文章保存回读', cpr2.content.includes('笔记正文') && cpr2.frontMatter.mood === '好')
+  await saveCollectionPost(tmpSite, coll, cp.id, { extra: { mood: null } })
+  check(
+    '文集参数可删除',
+    !('mood' in (await readCollectionPost(tmpSite, coll, cp.id)).frontMatter)
+  )
+  const clist = await listCollectionPosts(tmpSite, coll)
+  check('文集列表仅含本目录', clist.some((p) => p.id === cp.id) && !clist.some((p) => p.id.includes('about')))
+  await deleteCollectionPost(tmpSite, coll, cp.id, async () => {
+    throw new Error('no trash')
+  })
+  check('文集文章删除', !(await listCollectionPosts(tmpSite, coll)).some((p) => p.id === cp.id))
+
+  // 越界防护：文集目录必须位于站点根目录内，文章路径不允许穿越
+  const badColl: CollectionDef = { id: 'c-bad', name: '坏文集', icon: '📚', dir: '..' }
+  check(
+    '文集目录越界被拒绝',
+    await listCollectionPosts(tmpSite, badColl).then(() => false).catch(() => true)
+  )
+  check(
+    '文集文章路径穿越被拒绝',
+    await readCollectionPost(tmpSite, coll, '../_config.yml').then(() => false).catch(() => true)
+  )
+  check(
+    '文集非 md 文件被拒绝',
+    await readCollectionPost(tmpSite, coll, 'a.txt').then(() => false).catch(() => true)
+  )
 
   // 10.7 部署失败识别与配置预检
   // hexo 的 deployer 用 spawn(stdio:'inherit') 调 git，push 失败不改变退出码，

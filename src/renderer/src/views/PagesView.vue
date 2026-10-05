@@ -181,13 +181,13 @@ watch(
           />
         </n-form-item>
         <n-form-item label="页面路径">
-          <n-input v-model:value="form.path" placeholder="相对 source，如 about/index 或 contact" />
+          <n-input v-model:value="form.path" placeholder="相对 source，如 about 或 docs/guide（将创建同名文件夹，内含 index.md）" />
         </n-form-item>
         <n-form-item label="页面参数">
           <div class="yaml-block">
             <div class="muted small yaml-hint">
-              直接写 front-matter（YAML），创建后仍可在编辑器里修改。内置的
-              <code>title</code>、<code>date</code> 会自动生成，无需在此填写。
+              直接写 front-matter（YAML），创建后仍可在编辑器里修改。与上方标题、自动生成
+              的日期重合的部分会自动去重，无需手动避开。
             </div>
             <div class="code-editor-wrap create-editor">
               <CodeEditor v-model="form.yaml" :dark="ui.isDark" placeholder="layout: page" />

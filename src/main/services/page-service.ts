@@ -121,20 +121,37 @@ function normalizeTargetPath(path: string): string {
   return segments.join('/')
 }
 
+/**
+ * 新建页面：路径即文件夹，在 source/ 下创建「<页面路径>/index.md」。
+ * about、about/、about/index 都规整为文件夹 about；多级路径（docs/guide）保留层级。
+ * 表单里的标题与参数 YAML 若有重合（如参数里也写了 title）自动去重，不提示：
+ * 标题以表单为准；参数里写了 date 则沿用参数的，否则自动填当前时间。
+ */
 export async function createPage(siteDir: string, options: PageCreateOptions): Promise<PageMeta> {
   const title = options.title.trim()
   if (!title) throw new Error('页面标题不能为空')
 
-  const target = normalizeTargetPath(options.path) || normalizeTargetPath(title)
-  if (!target) throw new Error('页面路径不合法')
+  const folder = normalizeTargetPath(options.path || title)
+    .replace(/(^|\/)index$/i, '')
+    .replace(/\/+$/, '')
+  if (!folder) throw new Error('页面路径不合法')
 
-  const filename = `${target}.md`
-  const filePath = idToPath(siteDir, filename)
-  if (existsSync(filePath)) throw new Error(`页面已存在：${filename}`)
+  const id = `${folder}/index.md`
+  const filePath = idToPath(siteDir, id)
+  if (existsSync(filePath)) throw new Error(`页面已存在：${id}`)
 
-  // 初始参数：优先使用用户填写的 YAML，解析失败直接报错（避免写入坏文件）
+  // 初始参数：优先使用用户填写的 YAML，解析失败直接报错（避免写入坏文件）。
+  // 与表单字段重合的键静默去重：title 以表单为准，date 以参数为准（表单不填日期）。
   const extra = parseYamlObject(options.frontMatterYaml ?? '')
-  const data: Record<string, unknown> = { ...extra, title, date: formatDate(new Date()) }
+  delete extra.title
+  const yamlDate = extra.date
+  delete extra.date
+
+  const data: Record<string, unknown> = {
+    ...extra,
+    title,
+    date: yamlDate ?? formatDate(new Date())
+  }
 
   const body = options.content ?? '\n'
   const serialized = matter.stringify(body, data)
@@ -142,7 +159,7 @@ export async function createPage(siteDir: string, options: PageCreateOptions): P
   await fs.writeFile(filePath, serialized, 'utf8')
 
   const parsed = matter(serialized)
-  return metaFrom(filename, parsed.content, parsed.data as Record<string, unknown>)
+  return metaFrom(id, parsed.content, parsed.data as Record<string, unknown>)
 }
 
 /** 解析 front-matter YAML：空内容返回空对象；非对象或语法错误时抛出可读错误 */
