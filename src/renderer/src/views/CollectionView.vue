@@ -216,8 +216,9 @@ watch(collectionId, reload)
             <div class="title-line">
               <div class="panel-title">{{ def.name }}</div>
               <n-space :size="4" align="center">
+                <!-- 两个管理按钮同款 secondary：形态一致，悬停时才区分主次（移除变红） -->
                 <n-button size="tiny" secondary @click="openEdit">编辑</n-button>
-                <n-button size="tiny" type="error" quaternary @click="removeCollection">移除</n-button>
+                <n-button size="tiny" secondary class="btn-danger" @click="removeCollection">移除</n-button>
               </n-space>
             </div>
             <div
