@@ -13,6 +13,7 @@ import {
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { usePagesStore } from '../stores/pages'
+import { useSiteStore } from '../stores/site'
 import { useWorkspaceStore } from '../stores/workspace'
 import { message } from '../composables/message'
 import CodeEditor from '../components/CodeEditor.vue'
@@ -20,6 +21,7 @@ import { useUiStore } from '../stores/ui'
 import type { PageMeta } from '@shared/ipc'
 
 const pages = usePagesStore()
+const siteStore = useSiteStore()
 const ws = useWorkspaceStore()
 const ui = useUiStore()
 const router = useRouter()
@@ -33,6 +35,12 @@ const form = ref({ title: '', path: '', yaml: DEFAULT_FRONT_MATTER })
 
 function openEditor(row: PageMeta): void {
   router.push({ path: '/page-editor', query: { id: row.id } })
+}
+
+/** 在资源管理器中定位页面文件 */
+function revealPage(row: PageMeta): void {
+  if (!siteStore.site) return
+  void window.api.revealInFolder(siteStore.site.path + '/source/' + row.id)
 }
 
 async function remove(row: PageMeta): Promise<void> {
@@ -53,7 +61,16 @@ const columns: DataTableColumns<PageMeta> = [
   {
     title: '路径',
     key: 'id',
-    render: (row) => h('span', { class: 'mono-cell' }, `source/${row.id}`)
+    render: (row) =>
+      h(
+        'span',
+        {
+          class: 'mono-cell path-link',
+          title: '点击打开所在文件夹',
+          onClick: () => revealPage(row)
+        },
+        `source/${row.id}`
+      )
   },
   { title: '日期', key: 'date', width: 180 },
   { title: '字数', key: 'wordCount', width: 80 },

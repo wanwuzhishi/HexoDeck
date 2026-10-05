@@ -3,13 +3,17 @@ import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDataTable, NInput, NModal, NPopconfirm, NSpace } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
-import { useCollectionsStore, COLLECTION_ICONS } from '../stores/collections'
+import { useCollectionsStore } from '../stores/collections'
+import { useSiteStore } from '../stores/site'
+import CollectionIcon from '../components/CollectionIcon.vue'
+import { COLLECTION_ICON_PRESETS, isImportedIcon } from '../constants/collectionIcons'
 import { confirmDialog, message } from '../composables/message'
 import type { CollectionPostMeta } from '@shared/ipc'
 
 const route = useRoute()
 const router = useRouter()
 const collections = useCollectionsStore()
+const siteStore = useSiteStore()
 
 const collectionId = computed(() => String(route.query.id ?? ''))
 const def = computed(() => collections.def(collectionId.value))
@@ -23,13 +27,35 @@ const filtered = computed(() => {
 })
 
 const showEdit = ref(false)
-const editForm = ref({ name: '', icon: COLLECTION_ICONS[0] })
+const editForm = ref({ name: '', icon: 'Book' })
 const savingEdit = ref(false)
 
 function openEdit(): void {
   if (!def.value) return
   editForm.value = { name: def.value.name, icon: def.value.icon }
   showEdit.value = true
+}
+
+/** 从本地导入文集图标（编辑弹窗用） */
+function pickEditIcon(): void {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.png,.jpg,.jpeg,.svg,.webp,.ico'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (!file) return
+    if (file.size > 200 * 1024) {
+      message.error('图标文件过大（超过 200KB），请换一张小图')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      editForm.value.icon = String(reader.result ?? '')
+    }
+    reader.onerror = () => message.error('读取图片失败')
+    reader.readAsDataURL(file)
+  }
+  input.click()
 }
 
 async function saveEdit(): Promise<void> {
@@ -95,6 +121,13 @@ function openEditor(row: CollectionPostMeta): void {
   router.push({ path: '/collection-editor', query: { collection: collectionId.value, post: row.id } })
 }
 
+/** 在资源管理器中显示文集内文件所在位置（rel 为文集目录内相对路径，空串表示目录本身） */
+function reveal(rel: string): void {
+  if (!def.value || !siteStore.site) return
+  const dirPart = def.value.dir ? `${def.value.dir}/` : ''
+  void window.api.revealInFolder(`${siteStore.site.path}/${dirPart}${rel}`)
+}
+
 async function remove(row: CollectionPostMeta): Promise<void> {
   try {
     await collections.removePost(collectionId.value, row.id)
@@ -110,7 +143,21 @@ const columns: DataTableColumns<CollectionPostMeta> = [
     key: 'title',
     render: (row) => h('a', { class: 'post-link', onClick: () => openEditor(row) }, row.title)
   },
-  { title: '日期', key: 'date', width: 180 },
+  {
+    title: '路径',
+    key: 'path',
+    render: (row) =>
+      h(
+        'span',
+        {
+          class: 'path-link mono-cell',
+          title: '点击打开所在文件夹',
+          onClick: () => reveal(row.id)
+        },
+        `${def.value?.dir ? `${def.value.dir}/` : ''}${row.id}`
+      )
+  },
+  { title: '日期', key: 'date', width: 170 },
   { title: '字数', key: 'wordCount', width: 80 },
   {
     title: '操作',
@@ -162,10 +209,16 @@ watch(collectionId, reload)
     <section v-if="def" class="glass panel">
       <div class="panel-head">
         <div class="head-title-row">
-          <span class="coll-icon">{{ def.icon }}</span>
+          <CollectionIcon class="coll-icon" :icon="def.icon" :size="24" />
           <div>
             <div class="panel-title">{{ def.name }}</div>
-            <div class="muted small coll-dir-line" :title="def.dir">目录：站点内 {{ def.dir }}</div>
+            <div
+              class="muted small coll-dir-line path-link"
+              :title="def.dir ? '点击打开所在文件夹' : '点击打开站点根目录'"
+              @click="reveal(def.dir)"
+            >
+              目录：站点内 {{ def.dir || '（根目录）' }}
+            </div>
           </div>
         </div>
         <n-space>
@@ -217,17 +270,30 @@ watch(collectionId, reload)
         <div class="edit-label">图标</div>
         <div class="icon-picker">
           <button
-            v-for="ic in COLLECTION_ICONS"
-            :key="ic"
+            v-for="p in COLLECTION_ICON_PRESETS"
+            :key="p.key"
             type="button"
             class="icon-choice"
-            :class="{ active: editForm.icon === ic }"
-            @click="editForm.icon = ic"
+            :class="{ active: editForm.icon === p.key }"
+            :title="p.label"
+            @click="editForm.icon = p.key"
           >
-            {{ ic }}
+            <n-icon :component="p.comp" :size="17" />
+          </button>
+          <button
+            type="button"
+            class="icon-choice"
+            :class="{ active: isImportedIcon(editForm.icon) }"
+            title="导入外部图标"
+            @click="pickEditIcon"
+          >
+            {{ isImportedIcon(editForm.icon) ? '已导入' : '导入…' }}
           </button>
         </div>
-        <div class="muted small">目录（站点内 {{ def?.dir }}）创建后不可更改</div>
+        <div class="muted small">
+          目录（站点内 {{ def?.dir || '（根目录）' }}）创建后不可更改，
+          <span class="path-link" title="点击打开所在文件夹" @click="reveal(def?.dir ?? '')">打开所在文件夹</span>
+        </div>
       </div>
       <template #footer>
         <n-space justify="end">

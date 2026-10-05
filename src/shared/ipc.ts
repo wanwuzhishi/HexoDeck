@@ -316,6 +316,8 @@ export interface Api {
   getAppInfo(): Promise<AppInfo>
   saveAppSettings(patch: Partial<AppSettings>): Promise<Result<AppSettings>>
   openLogFolder(): Promise<void>
+  /** 在系统资源管理器中显示文件/文件夹所在位置 */
+  revealInFolder(path: string): Promise<void>
 
   /** 自绘标题栏的窗口控制（无边框窗口用） */
   minimizeWindow(): Promise<void>

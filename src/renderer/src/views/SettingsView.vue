@@ -72,6 +72,11 @@ function applyIconResult(r: { ok: boolean; error?: string; data?: SiteInfo }): v
   }
 }
 
+/** 在资源管理器中定位站点图标文件 */
+function revealIcon(): void {
+  if (site.site?.iconPath) void window.api.revealInFolder(site.site.iconPath)
+}
+
 async function pickSiteIcon(): Promise<void> {
   iconBusy.value = true
   try {
@@ -835,7 +840,12 @@ watch(activeTab, (tab) => {
                       支持 .ico / .png / .jpg / .svg / .webp，也可直接把图片拖到左侧方块上。
                       图标写入站点 <code>source/favicon.*</code>，Hexo 生成时网站也会用上。
                     </div>
-                    <div v-if="site.site?.iconPath" class="muted small path" :title="site.site.iconPath">
+                    <div
+                      v-if="site.site?.iconPath"
+                      class="muted small path path-link"
+                      title="点击打开所在文件夹"
+                      @click="revealIcon"
+                    >
                       {{ site.site.iconPath }}
                     </div>
                   </div>

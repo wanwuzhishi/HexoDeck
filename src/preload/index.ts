@@ -30,6 +30,7 @@ const api: Api = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   saveAppSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('app:saveSettings', patch),
   openLogFolder: () => ipcRenderer.invoke('app:openLogs'),
+  revealInFolder: (path: string) => ipcRenderer.invoke('shell:reveal', path),
 
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggleMaximize'),

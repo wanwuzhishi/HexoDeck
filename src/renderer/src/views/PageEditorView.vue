@@ -248,6 +248,12 @@ async function removePage(): Promise<void> {
   }
 }
 
+/** 在资源管理器中定位当前页面文件 */
+function revealPage(): void {
+  if (!detail.value || !siteStore.site) return
+  void window.api.revealInFolder(`${siteStore.site.path}/source/${detail.value.id}`)
+}
+
 function onKeydown(e: KeyboardEvent): void {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault()
@@ -324,7 +330,12 @@ onBeforeUnmount(() => {
     <div class="meta-row">
       <span class="page-title" :title="previewTitle">{{ previewTitle || '（未设置标题）' }}</span>
       <span v-if="previewDate" class="muted small page-date">{{ previewDate }}</span>
-      <span v-if="detail" class="muted small page-path" :title="detail.id">source/{{ detail.id }}</span>
+      <span
+        v-if="detail"
+        class="muted small page-path path-link"
+        :title="`点击打开所在文件夹：source/${detail.id}`"
+        @click="revealPage"
+      >source/{{ detail.id }}</span>
     </div>
 
     <div class="editor-body" :class="{ row: showPreview || showParams }">

@@ -12,12 +12,14 @@ import {
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { usePostsStore } from '../stores/posts'
+import { useSiteStore } from '../stores/site'
 import { message } from '../composables/message'
 import type { PostMeta } from '@shared/ipc'
 
 type PostRow = PostMeta & { snippet?: string }
 
 const posts = usePostsStore()
+const siteStore = useSiteStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -35,6 +37,12 @@ const showCreate = ref(false)
 const createKind = ref<'post' | 'draft'>('post')
 const createTitle = ref('')
 const creating = ref(false)
+
+/** 在资源管理器中定位文章文件 */
+function revealPost(row: PostMeta): void {
+  if (!siteStore.site) return
+  void window.api.revealInFolder(siteStore.site.path + '/source/' + row.id)
+}
 
 function openEditor(row: PostMeta): void {
   router.push({ path: '/editor', query: { id: row.id } })
@@ -65,6 +73,20 @@ const columns: DataTableColumns<PostRow> = [
           ? h('div', { class: 'snippet', title: row.snippet }, `正文匹配：${row.snippet}`)
           : null
       ])
+  },
+  {
+    title: '路径',
+    key: 'path',
+    render: (row) =>
+      h(
+        'span',
+        {
+          class: 'mono-cell path-link',
+          title: '点击打开所在文件夹',
+          onClick: () => revealPost(row)
+        },
+        `source/${row.id}`
+      )
   },
   {
     title: '状态',

@@ -15,6 +15,7 @@ import {
 } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import {
+  AddOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
   ContrastOutline,
@@ -34,7 +35,9 @@ import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
 import InfoRail from './components/InfoRail.vue'
 import TitleBar from './components/TitleBar.vue'
-import { useCollectionsStore, COLLECTION_ICONS } from './stores/collections'
+import { useCollectionsStore } from './stores/collections'
+import CollectionIcon from './components/CollectionIcon.vue'
+import { COLLECTION_ICON_PRESETS, isImportedIcon } from './constants/collectionIcons'
 import appIcon from './assets/app-icon.png'
 import { message, setDiscreteTheme } from './composables/message'
 
@@ -57,13 +60,9 @@ watchEffect(() => {
 const renderIcon = (icon: unknown) => (): ReturnType<typeof h> =>
   h(NIcon, null, { default: () => h(icon as never) })
 
-/** 文集图标用 emoji 渲染 */
-const renderEmoji = (emoji: string) => (): ReturnType<typeof h> =>
-  h('span', { class: 'menu-emoji', title: '' }, emoji)
-
 const collections = useCollectionsStore()
 
-/** 内置菜单 + 用户自定义文集（名称限 8 字防溢出）+「新建文集」入口 */
+/** 内置菜单 + 用户自定义文集（名称限 8 字防溢出）+「自定义」入口 */
 const menuOptions = computed<MenuOption[]>(() => [
   { label: '站点', key: '/', icon: renderIcon(HomeOutline) },
   { label: '文章', key: '/posts', icon: renderIcon(DocumentTextOutline) },
@@ -71,9 +70,9 @@ const menuOptions = computed<MenuOption[]>(() => [
   ...collections.defs.map<MenuOption>((c) => ({
     label: () => h('span', { class: 'menu-coll-label', title: c.name }, c.name),
     key: `/collection?id=${c.id}`,
-    icon: renderEmoji(c.icon)
+    icon: () => h(CollectionIcon, { icon: c.icon, size: 16 })
   })),
-  { label: '＋ 新建文集', key: '/new-collection', icon: renderEmoji('➕') },
+  { label: '自定义', key: '/new-collection', icon: renderIcon(AddOutline) },
   { label: '统计', key: '/stats', icon: renderIcon(StatsChartOutline) },
   { label: '预览', key: '/preview', icon: renderIcon(EyeOutline) },
   { label: '发布', key: '/publish', icon: renderIcon(RocketOutline) },
@@ -124,10 +123,9 @@ function onMenu(key: string): void {
 }
 
 // ---------- 新建文集弹窗（名称 + 图标 + 站点根目录内的文件夹） ----------
-const ICON_CHOICES = COLLECTION_ICONS
 const showCollDialog = ref(false)
 const collSaving = ref(false)
-const collForm = ref({ name: '', icon: COLLECTION_ICONS[0], dir: '' })
+const collForm = ref({ name: '', icon: 'Book', dir: '' })
 const collDirError = ref('')
 
 function openCollDialog(): void {
@@ -135,9 +133,37 @@ function openCollDialog(): void {
     message.warning('请先打开站点')
     return
   }
-  collForm.value = { name: '', icon: COLLECTION_ICONS[0], dir: '' }
+  collForm.value = { name: '', icon: 'Book', dir: '' }
   collDirError.value = ''
   showCollDialog.value = true
+}
+
+/** 从本地导入文集图标（转 data URL 存储，限 200KB） */
+function pickCollIcon(): void {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.png,.jpg,.jpeg,.svg,.webp,.ico'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (!file) return
+    if (file.size > 200 * 1024) {
+      message.error('图标文件过大（超过 200KB），请换一张小图')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      collForm.value.icon = String(reader.result ?? '')
+    }
+    reader.onerror = () => message.error('读取图片失败')
+    reader.readAsDataURL(file)
+  }
+  input.click()
+}
+
+/** 在资源管理器中显示站点内相对路径所在位置 */
+function revealSitePath(rel: string): void {
+  if (!siteStore.site || !rel) return
+  void window.api.revealInFolder(`${siteStore.site.path}/${rel}`)
 }
 
 async function pickCollDir(): Promise<void> {
@@ -258,8 +284,8 @@ watch(
         </div>
       </div>
 
-      <!-- 新建文集：名称 + 图标 + 站点根目录内的文件夹 -->
-      <n-modal v-model:show="showCollDialog" preset="card" title="新建文集" style="width: 480px">
+      <!-- 自定义文集：名称 + 图标 + 站点根目录内的文件夹 -->
+      <n-modal v-model:show="showCollDialog" preset="card" title="自定义" style="width: 480px">
         <n-form label-placement="left" :label-width="76">
           <n-form-item label="名称">
             <n-input
@@ -270,31 +296,50 @@ watch(
             />
           </n-form-item>
           <n-form-item label="图标">
-            <div class="icon-picker">
-              <button
-                v-for="ic in ICON_CHOICES"
-                :key="ic"
-                type="button"
-                class="icon-choice"
-                :class="{ active: collForm.icon === ic }"
-                @click="collForm.icon = ic"
-              >
-                {{ ic }}
-              </button>
+            <div class="coll-icon-field">
+              <div class="icon-picker">
+                <button
+                  v-for="p in COLLECTION_ICON_PRESETS"
+                  :key="p.key"
+                  type="button"
+                  class="icon-choice"
+                  :class="{ active: collForm.icon === p.key }"
+                  :title="p.label"
+                  @click="collForm.icon = p.key"
+                >
+                  <n-icon :component="p.comp" :size="17" />
+                </button>
+                <button
+                  type="button"
+                  class="icon-choice"
+                  :class="{ active: isImportedIcon(collForm.icon) }"
+                  title="导入外部图标"
+                  @click="pickCollIcon"
+                >
+                  {{ isImportedIcon(collForm.icon) ? '已导入' : '导入…' }}
+                </button>
+              </div>
+              <div v-if="isImportedIcon(collForm.icon)" class="muted small">
+                已使用导入的图标，点击「导入…」可更换
+              </div>
             </div>
           </n-form-item>
           <n-form-item label="目录">
             <n-space :size="8" align="center" style="width: 100%">
               <n-button secondary @click="pickCollDir">选择文件夹</n-button>
-              <span class="coll-dir" :title="collForm.dir">
-                {{ collForm.dir ? `站点内：${collForm.dir}` : '须为站点根目录内的文件夹' }}
+              <span
+                class="coll-dir path-link"
+                :title="collForm.dir ? '点击打开所在文件夹' : ''"
+                @click="collForm.dir && revealSitePath(collForm.dir)"
+              >
+                {{ collForm.dir ? `站点内：${collForm.dir}` : '站点根目录及其子目录（任意层级）均可' }}
               </span>
             </n-space>
           </n-form-item>
         </n-form>
         <div v-if="collDirError" class="coll-error">{{ collDirError }}</div>
         <div class="muted small coll-tip">
-          文集目录须位于站点根目录内（如 source/notes）。文集中的 Markdown 文件在此集中管理，
+          文集目录位于站点根目录下（含任意深度的子目录）。文集中的 Markdown 文件在此集中管理，
           入口名称与图标随时可在文集页修改。
         </div>
         <template #footer>
@@ -520,12 +565,7 @@ watch(
   width: 100%;
 }
 
-/* 文集菜单项：emoji 图标与名称截断 */
-.menu-emoji {
-  font-size: 15px;
-  line-height: 1;
-}
-
+/* 文集菜单项：图标与名称对齐、名称截断 */
 .sider :deep(.menu-coll-label) {
   display: inline-block;
   max-width: 108px;

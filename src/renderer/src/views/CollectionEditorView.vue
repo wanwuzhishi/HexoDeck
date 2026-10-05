@@ -6,6 +6,7 @@ import { ChevronBackOutline } from '@vicons/ionicons5'
 import MarkdownIt from 'markdown-it'
 import { useSiteStore } from '../stores/site'
 import { useCollectionsStore } from '../stores/collections'
+import CollectionIcon from '../components/CollectionIcon.vue'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
@@ -226,6 +227,13 @@ async function removePost(): Promise<void> {
   }
 }
 
+/** 在资源管理器中定位当前文集文章文件 */
+function revealPost(): void {
+  if (!detail.value || !siteStore.site) return
+  const dirPart = def.value ? (def.value.dir ? def.value.dir + '/' : '') : ''
+  void window.api.revealInFolder(siteStore.site.path + '/' + dirPart + detail.value.id)
+}
+
 function onKeydown(e: KeyboardEvent): void {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault()
@@ -259,7 +267,10 @@ onBeforeUnmount(() => {
   <div class="editor-page">
     <div class="editor-header">
       <n-space align="center">
-        <span class="title">{{ def ? `${def.icon} ${def.name}` : '文集' }}</span>
+        <span class="title coll-title">
+          <CollectionIcon v-if="def" :icon="def.icon" :size="18" />
+          {{ def?.name ?? '文集' }}
+        </span>
         <n-tag v-if="detail" size="small" :bordered="false">文章</n-tag>
         <n-tag v-if="dirty" type="info" size="small" :bordered="false">未保存</n-tag>
       </n-space>
@@ -307,7 +318,12 @@ onBeforeUnmount(() => {
         class="date-picker"
         @update:formatted-value="(v: string | null) => (form.date = v ?? '')"
       />
-      <span v-if="detail" class="muted small page-path" :title="detail.id">{{ detail.id }}</span>
+      <span
+        v-if="detail"
+        class="muted small page-path path-link"
+        :title="'点击打开所在文件夹：' + (def ? def.dir + '/' : '') + detail.id"
+        @click="revealPost"
+      >{{ def ? def.dir + '/' : '' }}{{ detail.id }}</span>
     </div>
 
     <div class="editor-body" :class="{ row: showPreview || showParams }">
@@ -447,6 +463,12 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
+  gap: 8px;
+}
+
+.coll-title {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
 }
 

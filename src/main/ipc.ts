@@ -228,6 +228,10 @@ export function registerIpc(ctx: IpcContext): void {
     quitAndInstall()
   })
 
+  ipcMain.handle('shell:reveal', async (_e, path: string) => {
+    if (typeof path === 'string' && path.trim()) shell.showItemInFolder(resolve(path.trim()))
+  })
+
   ipcMain.handle('app:openLogs', async () => {
     const file = getLogFile()
     if (file) shell.showItemInFolder(file)
@@ -377,11 +381,12 @@ export function registerIpc(ctx: IpcContext): void {
     return { site, def }
   }
 
-  /** 把绝对目录转换为站点内 posix 相对路径；不在站点内时返回 null */
+  /** 把绝对目录转换为站点内 posix 相对路径；不在站点内时返回 null。
+   *  站点根目录本身返回空串（表示整个站点），任意深度的子目录均允许。 */
   const dirInsideSite = (siteDir: string, abs: string): string | null => {
     const root = resolve(siteDir)
     const target = resolve(abs)
-    if (target === root || !target.startsWith(root + sep)) return null
+    if (!target.startsWith(root + sep) && target !== root) return null
     return relative(root, target).split(sep).join('/')
   }
 
@@ -406,7 +411,7 @@ export function registerIpc(ctx: IpcContext): void {
       }
       const dir = dirInsideSite(site, picked.filePaths[0])
       if (!dir) {
-        return { ok: false, error: '文集目录必须位于站点根目录内' }
+        return { ok: false, error: '文集目录必须是站点根目录或其子目录' }
       }
       return okResult({ dir })
     } catch (e) {
@@ -422,7 +427,7 @@ export function registerIpc(ctx: IpcContext): void {
         const nameErr = validCollName(name)
         if (nameErr) return { ok: false, error: nameErr }
         const inside = dirInsideSite(site, dir)
-        if (!inside) return { ok: false, error: '文集目录必须位于站点根目录内' }
+        if (!inside) return { ok: false, error: '文集目录必须是站点根目录或其子目录' }
         const defs = await ctx.config.addCollection(site, {
           id: `coll-${Date.now().toString(36)}`,
           name: name.trim(),

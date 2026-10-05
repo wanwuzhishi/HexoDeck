@@ -274,6 +274,12 @@ async function removePost(): Promise<void> {
   }
 }
 
+/** 在资源管理器中定位当前文章文件 */
+function revealPost(): void {
+  if (!detail.value || !siteStore.site) return
+  void window.api.revealInFolder(`${siteStore.site.path}/source/${detail.value.id}`)
+}
+
 function onKeydown(e: KeyboardEvent): void {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault()
@@ -363,6 +369,14 @@ onBeforeUnmount(() => {
         class="date-picker"
         @update:formatted-value="(v: string | null) => (form.date = v ?? '')"
       />
+      <span
+        v-if="detail"
+        class="muted small page-path path-link"
+        :title="`点击打开所在文件夹：${detail.id}`"
+        @click="revealPost"
+      >
+        source/{{ detail.id }}
+      </span>
     </div>
 
       <div class="editor-body" :class="{ row: showPreview || showParams }">
@@ -560,6 +574,15 @@ onBeforeUnmount(() => {
 .date-picker {
   width: 230px;
   flex: none;
+}
+
+.page-path {
+  align-self: center;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
 }
 .editor-body {
   flex: 1;
