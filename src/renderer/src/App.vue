@@ -27,6 +27,7 @@ import {
   RocketOutline,
   SettingsOutline,
   StatsChartOutline,
+  CloudUploadOutline,
   SunnyOutline
 } from '@vicons/ionicons5'
 import { darkOverrides, lightOverrides } from './theme'
@@ -313,14 +314,17 @@ watch(
                   type="button"
                   class="icon-choice"
                   :class="{ active: isImportedIcon(collForm.icon) }"
-                  title="导入外部图标"
+                  :title="isImportedIcon(collForm.icon) ? '重新导入外部图标' : '导入外部图标'"
                   @click="pickCollIcon"
                 >
-                  {{ isImportedIcon(collForm.icon) ? '已导入' : '导入…' }}
+                  <template v-if="isImportedIcon(collForm.icon)">
+                    <img class="icon-choice-preview" :src="collForm.icon" alt="" />
+                  </template>
+                  <n-icon v-else :component="CloudUploadOutline" :size="17" />
                 </button>
               </div>
               <div v-if="isImportedIcon(collForm.icon)" class="muted small">
-                已使用导入的图标，点击「导入…」可更换
+                已使用导入的图标，点击右侧按钮可重新导入
               </div>
             </div>
           </n-form-item>
@@ -598,6 +602,14 @@ watch(
 
 .icon-choice:hover {
   background: var(--accent-soft);
+}
+
+.icon-choice-preview {
+  width: 17px;
+  height: 17px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
 }
 
 .icon-choice.active {

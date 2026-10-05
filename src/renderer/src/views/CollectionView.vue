@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NDataTable, NInput, NModal, NPopconfirm, NSpace } from 'naive-ui'
+import { NButton, NDataTable, NIcon, NInput, NModal, NPopconfirm, NSpace } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { useCollectionsStore } from '../stores/collections'
 import { useSiteStore } from '../stores/site'
 import CollectionIcon from '../components/CollectionIcon.vue'
 import { COLLECTION_ICON_PRESETS, isImportedIcon } from '../constants/collectionIcons'
+import { CloudUploadOutline } from '@vicons/ionicons5'
 import { confirmDialog, message } from '../composables/message'
 import type { CollectionPostMeta } from '@shared/ipc'
 
@@ -284,10 +285,16 @@ watch(collectionId, reload)
             type="button"
             class="icon-choice"
             :class="{ active: isImportedIcon(editForm.icon) }"
-            title="导入外部图标"
+            :title="isImportedIcon(editForm.icon) ? '重新导入外部图标' : '导入外部图标'"
             @click="pickEditIcon"
           >
-            {{ isImportedIcon(editForm.icon) ? '已导入' : '导入…' }}
+            <img
+              v-if="isImportedIcon(editForm.icon)"
+              class="icon-choice-preview"
+              :src="editForm.icon"
+              alt=""
+            />
+            <n-icon v-else :component="CloudUploadOutline" :size="17" />
           </button>
         </div>
         <div class="muted small">
@@ -391,6 +398,14 @@ watch(collectionId, reload)
 
 .icon-choice:hover {
   background: var(--accent-soft);
+}
+
+.icon-choice-preview {
+  width: 17px;
+  height: 17px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
 }
 
 .icon-choice.active {

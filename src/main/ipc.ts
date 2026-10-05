@@ -381,6 +381,15 @@ export function registerIpc(ctx: IpcContext): void {
     return { site, def }
   }
 
+  /** 校验「站点内相对路径」（如 source/_dynamics、notes）：拒绝穿越与绝对路径 */
+  const normalizeInsideRel = (rel: string): string | null => {
+    const cleaned = (rel ?? '').trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '')
+    if (cleaned === '') return '' // 站点根目录本身
+    const parts = cleaned.split('/')
+    if (parts.some((p) => p === '..')) return null
+    return parts.filter((p) => p && p !== '.').join('/')
+  }
+
   /** 把绝对目录转换为站点内 posix 相对路径；不在站点内时返回 null。
    *  站点根目录本身返回空串（表示整个站点），任意深度的子目录均允许。 */
   const dirInsideSite = (siteDir: string, abs: string): string | null => {
@@ -410,7 +419,7 @@ export function registerIpc(ctx: IpcContext): void {
         return okResult(null)
       }
       const dir = dirInsideSite(site, picked.filePaths[0])
-      if (!dir) {
+      if (dir === null) {
         return { ok: false, error: '文集目录必须是站点根目录或其子目录' }
       }
       return okResult({ dir })
@@ -426,8 +435,8 @@ export function registerIpc(ctx: IpcContext): void {
         const site = requireSite()
         const nameErr = validCollName(name)
         if (nameErr) return { ok: false, error: nameErr }
-        const inside = dirInsideSite(site, dir)
-        if (!inside) return { ok: false, error: '文集目录必须是站点根目录或其子目录' }
+        const inside = normalizeInsideRel(dir)
+        if (inside === null) return { ok: false, error: '文集目录必须是站点根目录或其子目录' }
         const defs = await ctx.config.addCollection(site, {
           id: `coll-${Date.now().toString(36)}`,
           name: name.trim(),
