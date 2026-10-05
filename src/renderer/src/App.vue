@@ -312,7 +312,7 @@ watch(
                 </button>
                 <button
                   type="button"
-                  class="icon-choice"
+                  class="icon-choice icon-choice-import"
                   :class="{ active: isImportedIcon(collForm.icon) }"
                   :title="isImportedIcon(collForm.icon) ? '重新导入外部图标' : '导入外部图标'"
                   @click="pickCollIcon"
@@ -321,6 +321,8 @@ watch(
                     <img class="icon-choice-preview" :src="collForm.icon" alt="" />
                   </template>
                   <n-icon v-else :component="CloudUploadOutline" :size="17" />
+                  <!-- 右下角加号角标：与预置图标区分，提示可添加自己的图标 -->
+                  <span class="import-badge">+</span>
                 </button>
               </div>
               <div v-if="isImportedIcon(collForm.icon)" class="muted small">
@@ -616,6 +618,37 @@ watch(
   border-color: var(--accent);
   background: var(--accent-soft);
   box-shadow: var(--accent-glow);
+}
+
+/* 导入图标格：虚线描边 + 右下角加号，与预置图标明显区分 */
+.icon-choice-import {
+  position: relative;
+  border-style: dashed;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.icon-choice-import:hover {
+  background: var(--accent-soft);
+}
+
+/* 角标贴在右下角外侧，不挤占图标区域 */
+.import-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .coll-dir {

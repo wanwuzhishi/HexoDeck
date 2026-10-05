@@ -283,7 +283,7 @@ watch(collectionId, reload)
           </button>
           <button
             type="button"
-            class="icon-choice"
+            class="icon-choice icon-choice-import"
             :class="{ active: isImportedIcon(editForm.icon) }"
             :title="isImportedIcon(editForm.icon) ? '重新导入外部图标' : '导入外部图标'"
             @click="pickEditIcon"
@@ -295,6 +295,7 @@ watch(collectionId, reload)
               alt=""
             />
             <n-icon v-else :component="CloudUploadOutline" :size="17" />
+            <span class="import-badge">+</span>
           </button>
         </div>
         <div class="muted small">
@@ -406,6 +407,32 @@ watch(collectionId, reload)
   object-fit: cover;
   border-radius: 3px;
   display: block;
+}
+
+/* 导入图标格：虚线描边 + 右下角加号，与预置图标区分 */
+.icon-choice-import {
+  position: relative;
+  border-style: dashed;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.import-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .icon-choice.active {
