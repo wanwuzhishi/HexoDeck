@@ -212,7 +212,14 @@ watch(collectionId, reload)
         <div class="head-title-row">
           <CollectionIcon class="coll-icon" :icon="def.icon" :size="24" />
           <div>
-            <div class="panel-title">{{ def.name }}</div>
+            <!-- 标题行右侧紧跟「编辑 / 移除」：管理入口归属标题，不与主操作混排 -->
+            <div class="title-line">
+              <div class="panel-title">{{ def.name }}</div>
+              <n-space :size="4" align="center">
+                <n-button size="tiny" secondary @click="openEdit">编辑</n-button>
+                <n-button size="tiny" type="error" quaternary @click="removeCollection">移除</n-button>
+              </n-space>
+            </div>
             <div
               class="muted small coll-dir-line path-link"
               :title="def.dir ? '点击打开所在文件夹' : '点击打开站点根目录'"
@@ -222,7 +229,8 @@ watch(collectionId, reload)
             </div>
           </div>
         </div>
-        <n-space>
+        <!-- 右侧只保留搜索、刷新与主操作，避免与「编辑/移除」混淆 -->
+        <n-space align="center">
           <n-input
             v-model:value="keyword"
             placeholder="搜索标题"
@@ -230,9 +238,8 @@ watch(collectionId, reload)
             size="small"
             style="width: 160px"
           />
-          <n-button size="tiny" secondary @click="openEdit">编辑文集</n-button>
-          <n-button size="tiny" type="error" quaternary @click="removeCollection">移除文集</n-button>
-          <n-button type="primary" @click="showCreate = true">新建文章</n-button>
+          <n-button size="tiny" secondary @click="reload">刷新</n-button>
+          <n-button type="primary" @click="showCreate = true">新建{{ def.name }}</n-button>
         </n-space>
       </div>
 
@@ -245,14 +252,14 @@ watch(collectionId, reload)
         size="small"
       />
       <div v-if="!filtered.length" class="muted small empty-line">
-        {{ keyword ? '没有匹配的文章' : '文集里还没有文章，点击「新建文章」开始创作' }}
+        {{ keyword ? '没有匹配的内容' : `「${def?.name ?? ''}」里还没有内容，点击「新建${def?.name ?? ''}」开始创作` }}
       </div>
     </section>
 
-    <n-modal v-model:show="showCreate" preset="card" title="新建文章" style="width: 440px">
+    <n-modal v-model:show="showCreate" preset="card" :title="`新建${def?.name ?? '内容'}`" style="width: 440px">
       <n-input
         v-model:value="createTitle"
-        placeholder="文章标题"
+        :placeholder="`${def?.name ?? '内容'}标题`"
         maxlength="80"
         @keyup.enter="doCreate"
       />
@@ -321,6 +328,14 @@ watch(collectionId, reload)
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+/* 标题与「编辑/移除」同行：管理入口贴标题，右侧留给搜索与主操作 */
+.title-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .head-title-row {
