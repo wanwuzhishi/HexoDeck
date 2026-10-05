@@ -229,7 +229,7 @@ watch(collectionId, reload)
             </div>
           </div>
         </div>
-        <!-- 右侧只保留搜索、刷新与主操作，避免与「编辑/移除」混淆 -->
+        <!-- 右侧：搜索 → 新建（主操作）→ 刷新；刷新样式与文章页保持一致 -->
         <n-space align="center">
           <n-input
             v-model:value="keyword"
@@ -238,8 +238,8 @@ watch(collectionId, reload)
             size="small"
             style="width: 160px"
           />
-          <n-button size="tiny" secondary @click="reload">刷新</n-button>
           <n-button type="primary" @click="showCreate = true">新建{{ def.name }}</n-button>
+          <n-button secondary @click="reload">刷新</n-button>
         </n-space>
       </div>
 
