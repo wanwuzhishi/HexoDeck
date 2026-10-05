@@ -1,6 +1,6 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { existsSync } from 'fs'
-import { appendFile, readFile } from 'fs/promises'
+import { appendFile, readFile, stat } from 'fs/promises'
 import { dirname, join, relative, resolve, sep } from 'path'
 import type {
   AppSettings,
@@ -229,7 +229,16 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   ipcMain.handle('shell:reveal', async (_e, path: string) => {
-    if (typeof path === 'string' && path.trim()) shell.showItemInFolder(resolve(path.trim()))
+    if (typeof path !== 'string' || !path.trim()) return
+    const target = resolve(path.trim())
+    // 目录直接打开：showItemInFolder 对目录只会定位其父级，体验不符预期；
+    // 文件则在资源管理器中定位并选中
+    const st = await stat(target).catch(() => null)
+    if (st?.isDirectory()) {
+      await shell.openPath(target)
+      return
+    }
+    shell.showItemInFolder(target)
   })
 
   ipcMain.handle('app:openLogs', async () => {

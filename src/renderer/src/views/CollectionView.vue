@@ -122,11 +122,10 @@ function openEditor(row: CollectionPostMeta): void {
   router.push({ path: '/collection-editor', query: { collection: collectionId.value, post: row.id } })
 }
 
-/** 在资源管理器中显示文集内文件所在位置（rel 为文集目录内相对路径，空串表示目录本身） */
-function reveal(rel: string): void {
-  if (!def.value || !siteStore.site) return
-  const dirPart = def.value.dir ? `${def.value.dir}/` : ''
-  void window.api.revealInFolder(`${siteStore.site.path}/${dirPart}${rel}`)
+/** 在资源管理器中打开/定位「站点内相对路径」（rel 已含站点根下的完整相对路径） */
+function reveal(siteRel: string): void {
+  if (!siteStore.site) return
+  void window.api.revealInFolder(`${siteStore.site.path}/${siteRel}`)
 }
 
 async function remove(row: CollectionPostMeta): Promise<void> {
@@ -153,7 +152,8 @@ const columns: DataTableColumns<CollectionPostMeta> = [
         {
           class: 'path-link mono-cell',
           title: '点击打开所在文件夹',
-          onClick: () => reveal(row.id)
+          // 路径列显示的含文集目录前缀，跳转同样要用完整相对路径
+          onClick: () => reveal(`${def.value?.dir ? `${def.value.dir}/` : ''}${row.id}`)
         },
         `${def.value?.dir ? `${def.value.dir}/` : ''}${row.id}`
       )
