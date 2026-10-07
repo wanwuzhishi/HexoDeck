@@ -1,12 +1,19 @@
 import { ref, computed } from 'vue'
 import { useSiteStore } from '../stores/site'
+import { dumpYamlValue, isStructuredValue, parseYamlField } from './yamlFormat'
 
-/** 参数类型：键值式（文本输入）或开关式（勾选框） */
-export type CustomFieldType = 'kv' | 'switch'
+/**
+ * 参数类型：
+ * - `kv`     键值式（文本输入）
+ * - `switch` 开关式（勾选框，写入布尔或自定义值）
+ * - `yaml`   结构化（YAML 编辑框，支持嵌套对象与对象数组，如资源卡的 links）
+ */
+export type CustomFieldType = 'kv' | 'switch' | 'yaml'
 
 /** 自定义 front-matter 参数（文章与页面共用同一套收集 / 编辑 / 登记逻辑） */
 export interface CustomField {
   key: string
+  /** 编辑态文本：kv/yaml 存文本，switch 存当前写入值 */
   value: string
   /** 界面显示名（中文），未登记时等于 key */
   label?: string
@@ -75,12 +82,15 @@ function normalizeSiteFields(raw: unknown): SiteField[] {
       const key = typeof o.key === 'string' ? o.key : ''
       if (!key) return null
       const label = typeof o.label === 'string' && o.label ? o.label : key
-      const type = o.type === 'switch' ? 'switch' : 'kv'
+      const type: CustomFieldType =
+        o.type === 'switch' ? 'switch' : o.type === 'yaml' ? 'yaml' : 'kv'
       const base: SiteField = { key, label }
       if (type === 'switch') {
         base.type = 'switch'
         base.onValue = typeof o.onValue === 'string' ? o.onValue : SWITCH_ON_DEFAULT
         base.offValue = typeof o.offValue === 'string' ? o.offValue : SWITCH_OFF_DEFAULT
+      } else if (type === 'yaml') {
+        base.type = 'yaml'
       }
       return base
     })
@@ -107,11 +117,12 @@ function saveSiteFields(sitePath: string, fields: SiteField[]): void {
   localStorage.setItem(SITE_FIELDS_KEY, JSON.stringify(map))
 }
 
-/** 值可能是数组/对象，统一转为可读字符串回填输入框 */
+/** 值可能是数组/对象。嵌套结构输出为多行 YAML（不再是紧凑 JSON 或 [object Object]），
+ *  供结构化参数的编辑框回填；标量数组与标量仍走简洁文本。 */
 export function toFieldValue(v: unknown): string {
   if (v == null) return ''
+  if (isStructuredValue(v)) return dumpYamlValue(v)
   if (Array.isArray(v)) return v.map(String).join(', ')
-  if (typeof v === 'object') return JSON.stringify(v)
   return String(v)
 }
 
@@ -153,6 +164,8 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
           base.type = 'switch'
           base.onValue = switchOnOf(f)
           base.offValue = switchOffOf(f)
+        } else if (f.type === 'yaml') {
+          base.type = 'yaml'
         }
         return base
       })
@@ -160,7 +173,9 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
   }
 
   /** 从 front-matter 提取自定义字段，并补上站点登记但本篇为空的参数。
-   *  登记为开关式的参数按开关类型回填（取值匹配选中值即勾选）。 */
+   *  登记为开关式的参数按开关类型回填（取值匹配选中值即勾选）。
+   *  值为嵌套对象/对象数组时自动按结构化处理 —— 即使该键从未登记，
+   *  打开也不会被压成字符串而损坏（安全兜底）。 */
   function extract(fm: Record<string, unknown>): CustomField[] {
     const sitePath = siteStore.site?.path
     const registered = sitePath ? (loadSiteFieldMap()[sitePath] ?? []) : []
@@ -175,6 +190,9 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
           base.type = 'switch'
           base.onValue = switchOnOf(reg)
           base.offValue = switchOffOf(reg)
+        } else if (reg?.type === 'yaml' || isStructuredValue(v)) {
+          // 登记为结构化，或值本身是嵌套结构（自动识别）→ 结构化编辑
+          base.type = 'yaml'
         }
         return base
       })
@@ -190,6 +208,8 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
           base.onValue = switchOnOf(r)
           base.offValue = switchOffOf(r)
           base.value = switchOffOf(r)
+        } else if (r.type === 'yaml') {
+          base.type = 'yaml'
         }
         return base
       })
@@ -205,7 +225,13 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
   function add(
     key: string,
     label: string,
-    opts?: { type?: CustomFieldType; onValue?: string; offValue?: string }
+    opts?: {
+      type?: CustomFieldType
+      onValue?: string
+      offValue?: string
+      /** 结构化参数的初始内容（如套用模板时传入骨架） */
+      initialValue?: string
+    }
   ): void {
     const base: CustomField = { key, value: '', label: label || key }
     if (opts?.type === 'switch') {
@@ -213,6 +239,11 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
       base.onValue = opts.onValue || SWITCH_ON_DEFAULT
       base.offValue = opts.offValue || SWITCH_OFF_DEFAULT
       base.value = base.offValue
+    } else if (opts?.type === 'yaml') {
+      base.type = 'yaml'
+      if (opts.initialValue) base.value = opts.initialValue
+    } else if (opts?.initialValue) {
+      base.value = opts.initialValue
     }
     customFields.value.push(base)
     persistSiteFields()
@@ -226,16 +257,42 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
   }
 
   /** 序列化为 extra 补丁；值为空串表示删除该键 */
-  function buildExtra(): Record<string, string | boolean | null> {
-    const extra: Record<string, string | boolean | null> = {}
+  /** 序列化为 extra 补丁；值为空时写 null 表示删除该键。
+   *  结构化参数把 YAML 文本解析回真实对象/数组（主进程会原样序列化成嵌套 YAML），
+   *  解析失败时不写入该键，避免把坏数据落盘。 */
+  function buildExtra(): Record<string, unknown> {
+    const extra: Record<string, unknown> = {}
     for (const f of customFields.value) {
       const key = f.key.trim()
       if (!key) continue
-      // 开关式参数写入布尔（true/false 字面量）或自定义字符串值
-      extra[key] = f.type === 'switch' ? switchFrontValue(f) : f.value === '' ? null : f.value
+      if (f.type === 'switch') {
+        // 开关式参数写入布尔（true/false 字面量）或自定义字符串值
+        extra[key] = switchFrontValue(f)
+        continue
+      }
+      if (f.type === 'yaml') {
+        const parsed = parseYamlField(f.value)
+        // 语法错误时跳过该键（保存前已被 hasYamlError 拦下）；空文本表示删除
+        if (!parsed.ok) continue
+        extra[key] = parsed.value === undefined ? null : parsed.value
+        continue
+      }
+      extra[key] = f.value === '' ? null : f.value
     }
     return extra
   }
+
+  /** 某个结构化字段的语法错误（无错时为空串） */
+  function yamlErrorOf(f: CustomField): string {
+    if (f.type !== 'yaml') return ''
+    const parsed = parseYamlField(f.value)
+    return parsed.ok ? '' : (parsed.error ?? '参数格式有误')
+  }
+
+  /** 是否存在任何结构化字段的语法错误（供保存前拦截与状态栏提示） */
+  const hasYamlError = computed(() =>
+    customFields.value.some((f) => f.type === 'yaml' && !parseYamlField(f.value).ok)
+  )
 
   /** 最近一次载入/保存后的完整 front-matter，供只读展示 */
   const lastFrontMatter = ref<Record<string, unknown>>({})
@@ -262,6 +319,8 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
     remove,
     buildExtra,
     readOnlyMeta,
-    setFrontMatter
+    setFrontMatter,
+    yamlErrorOf,
+    hasYamlError
   }
 }

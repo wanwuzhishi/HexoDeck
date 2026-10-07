@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NCheckbox, NDatePicker, NIcon, NInput, NPopconfirm, NRadioButton, NRadioGroup, NSpace, NTag } from 'naive-ui'
+import { NButton, NDatePicker, NIcon, NInput, NPopconfirm, NRadioButton, NRadioGroup, NSpace, NTag } from 'naive-ui'
 import { ChevronBackOutline } from '@vicons/ionicons5'
 import MarkdownIt from 'markdown-it'
 import { useSiteStore } from '../stores/site'
@@ -13,10 +13,6 @@ import { message } from '../composables/message'
 import { countWords } from '../composables/wordcount'
 import {
   FIELD_NAME_RE,
-  switchIsOn,
-  switchOffOf,
-  switchOnOf,
-  switchToggle,
   useCustomFields,
   type CustomFieldType
 } from '../composables/customFields'
@@ -68,7 +64,9 @@ const {
   remove: removeField,
   buildExtra: buildCustomExtra,
   readOnlyMeta,
-  setFrontMatter
+  setFrontMatter,
+  yamlErrorOf,
+  hasYamlError
 } = useCustomFields({ builtinKeys: BUILTIN_KEYS, onSnapshot: () => takeSnapshotOnly() })
 
 /** 添加参数弹窗 */
@@ -171,6 +169,10 @@ async function load(): Promise<void> {
 
 async function save(): Promise<void> {
   if (!detail.value || saving.value) return
+  if (hasYamlError.value) {
+    message.error('结构化参数有 YAML 语法错误，请先修正')
+    return
+  }
   saving.value = true
   try {
     // form 是响应式 Proxy，直接传数组给 IPC 会因结构化克隆失败
@@ -206,9 +208,11 @@ watch(
   [form, customFields],
   () => {
     if (!detail.value || !dirty.value) return
+    // 结构化参数有语法错误时暂停自动保存，避免把坏数据写盘
+    if (hasYamlError.value) return
     if (autoSaveTimer) clearTimeout(autoSaveTimer)
     autoSaveTimer = setTimeout(() => {
-      if (dirty.value) save()
+      if (dirty.value && !hasYamlError.value) save()
     }, ui.autoSaveDelay)
   },
   { deep: true }
@@ -340,29 +344,16 @@ onBeforeUnmount(() => {
           <div class="field-group">
             <div class="field-label">自定义参数</div>
             <div v-if="customFields.length" class="custom-list">
-              <div v-for="(f, i) in customFields" :key="f.key" class="custom-item">
-                <div class="custom-head">
-                  <span class="custom-name" :title="f.key">{{ fieldLabel(f.key) }}</span>
-                  <n-button size="tiny" quaternary type="error" title="移除该参数" @click="removeCustomField(i)">
-                    移除
-                  </n-button>
-                </div>
-                <n-checkbox
-                  v-if="f.type === 'switch'"
-                  :checked="switchIsOn(f)"
-                  @update:checked="(v: boolean) => switchToggle(f, v)"
-                >
-                  {{ switchIsOn(f) ? switchOnOf(f) : switchOffOf(f) }}
-                </n-checkbox>
-                <n-input
-                  v-else
-                  v-model:value="f.value"
-                  size="small"
-                  type="textarea"
-                  :autosize="{ minRows: 1, maxRows: 4 }"
-                  :placeholder="`${fieldLabel(f.key)} 的值`"
-                />
-              </div>
+              <CustomFieldCard
+                v-for="(f, i) in customFields"
+                :key="f.key"
+                :field="f"
+                :label="fieldLabel(f.key)"
+                :dark="ui.isDark"
+                :yaml-error="yamlErrorOf(f)"
+                @update:value="(v: string) => (f.value = v)"
+                @remove="removeCustomField(i)"
+              />
             </div>
             <div v-else class="muted small">尚未添加自定义参数</div>
             <n-button size="small" block secondary class="add-param-btn" @click="openAddField">
@@ -414,9 +405,16 @@ onBeforeUnmount(() => {
         <n-radio-group v-model:value="newFieldType" size="small">
           <n-radio-button value="kv">键值式</n-radio-button>
           <n-radio-button value="switch">开关式</n-radio-button>
+          <n-radio-button value="yaml">结构化</n-radio-button>
         </n-radio-group>
         <span class="muted small">
-          {{ newFieldType === 'switch' ? '在参数栏显示为可勾选的开关' : '填写任意文本值' }}
+          {{
+            newFieldType === 'switch'
+              ? '在参数栏显示为可勾选的开关'
+              : newFieldType === 'yaml'
+                ? 'YAML 编辑框，支持嵌套与列表（如资源卡链接）'
+                : '填写任意文本值'
+          }}
         </span>
       </div>
       <div v-if="newFieldType === 'switch'" class="field-inputs switch-values">
@@ -440,7 +438,8 @@ onBeforeUnmount(() => {
 
     <div class="status-bar">
       <span>{{ liveWordCount }} 字</span>
-      <span v-if="dirty">· 有未保存修改（{{ autoSaveSeconds }}s 后自动保存）</span>
+      <span v-if="hasYamlError" class="err">· 结构化参数有语法错误，已暂停自动保存</span>
+      <span v-else-if="dirty">· 有未保存修改（{{ autoSaveSeconds }}s 后自动保存）</span>
       <span v-else-if="lastSavedAt">· 已保存于 {{ lastSavedAt }}</span>
       <span v-if="ws.previewUrl" class="hint">· 站内图片已映射到预览服务</span>
     </div>
@@ -681,6 +680,9 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
+.status-bar .err {
+  color: var(--danger);
+}
 .hint {
   color: var(--accent);
 }

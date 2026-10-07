@@ -11,6 +11,7 @@ import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
 import { countWords } from '../composables/wordcount'
 import { load as loadYaml } from 'js-yaml'
+import { dumpYaml } from '../composables/yamlFormat'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import CodeEditor from '../components/CodeEditor.vue'
 import type { PageDetail } from '@shared/ipc'
@@ -59,41 +60,7 @@ function toggleParams(): void {
  */
 const paramsYaml = ref('')
 
-/**
- * 轻量 YAML 序列化：只处理标量/数组/普通对象（front-matter 的常见形态）。
- * 不用 js-yaml 的 dump 是为了避免它给长字符串加折行、给日期加引号等噪音。
- */
-function dumpYaml(obj: Record<string, unknown>, indent = 0): string {
-  const pad = '  '.repeat(indent)
-  const lines: string[] = []
-  for (const [k, v] of Object.entries(obj)) {
-    if (v == null) {
-      lines.push(`${pad}${k}:`)
-    } else if (Array.isArray(v)) {
-      if (!v.length) lines.push(`${pad}${k}: []`)
-      else {
-        lines.push(`${pad}${k}:`)
-        for (const item of v) lines.push(`${pad}  - ${scalarText(item)}`)
-      }
-    } else if (typeof v === 'object') {
-      lines.push(`${pad}${k}:`)
-      lines.push(dumpYaml(v as Record<string, unknown>, indent + 1))
-    } else {
-      lines.push(`${pad}${k}: ${scalarText(v)}`)
-    }
-  }
-  return lines.join('\n')
-}
-
-function scalarText(v: unknown): string {
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
-  const s = String(v)
-  if (s === '') return "''"
-  if (/^[\w./:@^~+%=-]+$/.test(s)) return s
-  return JSON.stringify(s)
-}
-
-/** 把完整 front-matter 回填到大框 */
+/** 把完整 front-matter 回填到大框（序列化实现见 composables/yamlFormat） */
 function frontMatterToYaml(fm: Record<string, unknown>): string {
   if (!Object.keys(fm).length) return ''
   return dumpYaml(fm)
@@ -183,14 +150,12 @@ async function save(): Promise<void> {
 
   saving.value = true
   try {
-    // front-matter 全量走 extra（大框是标题/日期的唯一编辑处）；
-    // 数组/对象转为文本以匹配 extra 的字符串契约
-    const extra: Record<string, string | null> = {}
+    // front-matter 全量走 extra（大框是标题/日期的唯一编辑处）。
+    // 嵌套对象与对象数组原样透传：主进程会序列化成规范的嵌套 YAML。
+    // 这里只做一层深拷贝 —— 直接传 Vue 响应式对象会因结构化克隆失败。
+    const extra: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(parsed)) {
-      if (v == null || v === '') extra[k] = null
-      else if (Array.isArray(v)) extra[k] = v.map(String).join(', ')
-      else if (typeof v === 'object') extra[k] = JSON.stringify(v)
-      else extra[k] = String(v)
+      extra[k] = v == null ? null : JSON.parse(JSON.stringify(v))
     }
 
     // 注意：form 是响应式 Proxy，直接传对象给 IPC 会因结构化克隆失败

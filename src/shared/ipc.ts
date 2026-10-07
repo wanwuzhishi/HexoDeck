@@ -21,13 +21,6 @@ export interface PostDetail extends PostMeta {
   frontMatter: Record<string, unknown>
 }
 
-/** 自定义 front-matter 字段（参数侧栏可增删） */
-export interface CustomField {
-  key: string
-  /** 值的字符串形式；布尔/数字原样保留由 YAML 序列化决定 */
-  value: string
-}
-
 /** 正文搜索命中项 */
 export interface SearchHit extends PostMeta {
   /** 命中位置附近的正文摘录 */
@@ -43,8 +36,10 @@ export interface PostPatch {
   /**
    * 自定义 front-matter 字段：写入时合并到现有元数据。
    * value 为 null 表示删除该键。
+   * 值可以是标量，也可以是嵌套对象或对象数组（如资源卡的 resource.links），
+   * 由 YAML 序列化原样输出。
    */
-  extra?: Record<string, string | boolean | null>
+  extra?: Record<string, unknown>
 }
 
 export interface SiteInfo {
@@ -93,7 +88,7 @@ export interface PagePatch {
    * 自定义 front-matter 字段：写入时合并到现有元数据。
    * value 为 null 表示删除该键。
    */
-  extra?: Record<string, string | boolean | null>
+  extra?: Record<string, unknown>
 }
 
 export interface RecentSite {
@@ -145,7 +140,7 @@ export interface CollectionPostPatch {
   date?: string
   content?: string
   /** 自定义 front-matter 字段；value 为 null 表示删除该键 */
-  extra?: Record<string, string | boolean | null>
+  extra?: Record<string, unknown>
 }
 
 /** 站点 _config.yml 表单化配置 */
