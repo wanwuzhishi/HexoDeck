@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 /** 自定义插入片段：工具栏上的一个按钮，点击把 snippet 插入光标处 */
 export interface Snippet {
@@ -71,7 +71,5 @@ export function useSnippets() {
     persist()
   }
 
-  const count = computed(() => snippets.value.length)
-
-  return { snippets, add, update, remove, count }
+  return { snippets, add, update, remove }
 }

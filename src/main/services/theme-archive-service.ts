@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs'
 import { existsSync } from 'fs'
-import { basename, join, dirname } from 'path'
+import { basename, join } from 'path'
 import * as tar from 'tar'
 import extractZip from 'extract-zip'
 
@@ -86,10 +86,8 @@ export async function installThemeFromArchive(
   const staging = join(siteDir, '.hexodeck-theme-staging')
   await fs.rm(staging, { recursive: true, force: true })
   await fs.mkdir(staging, { recursive: true })
-  log(`解压主题包：${basename(archivePath)}`)
 
   try {
-    log(`解压主题包：${basename(archivePath)}`)
     await extractArchive(archivePath, staging)
 
     const themeRoot = await locateThemeRoot(staging)
@@ -116,9 +114,4 @@ export async function installThemeFromArchive(
   } finally {
     await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined)
   }
-}
-
-/** 主题配置根目录（供调用方参考，保持与 site-config-service 一致） */
-export function themeDirOf(siteDir: string, name: string): string {
-  return join(dirname(join(siteDir, 'themes', name)), name)
 }

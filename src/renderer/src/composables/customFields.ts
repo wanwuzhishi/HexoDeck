@@ -57,11 +57,6 @@ export function switchIsOn(f: Pick<CustomField, 'value' | 'onValue'>): boolean {
   return (f.value || '') === switchOnOf(f)
 }
 
-/** 切换开关：写入对应的选中/取消值 */
-export function switchToggle(f: CustomField, checked: boolean): void {
-  f.value = checked ? switchOnOf(f) : switchOffOf(f)
-}
-
 /** 开关写入 front-matter 的值：true/false 用布尔（模板里字符串 'false' 是真值），自定义值保持字符串 */
 export function switchFrontValue(f: Pick<CustomField, 'value' | 'onValue' | 'offValue'>): string | boolean {
   const v = f.value === '' ? switchOffOf(f) : f.value
@@ -256,7 +251,6 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
     persistSiteFields()
   }
 
-  /** 序列化为 extra 补丁；值为空串表示删除该键 */
   /** 序列化为 extra 补丁；值为空时写 null 表示删除该键。
    *  结构化参数把 YAML 文本解析回真实对象/数组（主进程会原样序列化成嵌套 YAML），
    *  解析失败时不写入该键，避免把坏数据落盘。 */
@@ -313,7 +307,6 @@ export function useCustomFields(options: UseCustomFieldsOptions) {
   return {
     customFields,
     fieldLabel,
-    persistSiteFields,
     applyFrom,
     add,
     remove,

@@ -5,6 +5,7 @@ import { NIcon } from 'naive-ui'
 import { CloseOutline, CopyOutline, RemoveOutline, SquareOutline } from '@vicons/ionicons5'
 import { useSiteStore } from '../stores/site'
 import appIcon from '../assets/app-icon.png'
+import { siteInitialOf } from '../composables/siteIcon'
 
 /** 自绘标题栏：替代原生标题栏，与应用玻璃拟态 UI 保持一致。
  *  窗口为 frame:false，拖拽、双击最大化、窗口按钮都需自行实现。
@@ -45,11 +46,7 @@ const brandIcon = computed(() =>
   showSite.value && site.site?.iconUrl ? site.site.iconUrl : appIcon
 )
 
-/** 站点无自定义图标时用站点名首字占位 */
-const brandInitial = computed(() => {
-  const n = site.site?.title || site.site?.name || 'H'
-  return n.trim().charAt(0).toUpperCase()
-})
+const brandInitial = computed(() => siteInitialOf(site.site?.title, site.site?.name))
 
 const brandName = computed(() => (showSite.value ? (site.site?.name ?? '') : 'HexoDeck'))
 

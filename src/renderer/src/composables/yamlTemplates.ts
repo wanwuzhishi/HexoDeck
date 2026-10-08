@@ -175,5 +175,5 @@ export function useYamlTemplates() {
     return [...builtin, ...custom.value]
   }
 
-  return { builtin, custom, all, addFromYaml, remove }
+  return { all, addFromYaml, remove }
 }

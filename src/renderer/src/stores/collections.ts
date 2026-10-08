@@ -1,37 +1,15 @@
 import { defineStore } from 'pinia'
 import type { CollectionDef, CollectionPostMeta } from '@shared/ipc'
 
-/** 预置的文集图标（侧栏入口与新建弹窗共用） */
-export const COLLECTION_ICONS = [
-  '📚',
-  '📝',
-  '🏷️',
-  '⭐',
-  '🚀',
-  '💡',
-  '🎯',
-  '🗂️',
-  '🌱',
-  '🎵',
-  '🎨',
-  '📷',
-  '💻',
-  '🎮',
-  '🍜',
-  '📁'
-]
-
 export const useCollectionsStore = defineStore('collections', {
   state: () => ({
     defs: [] as CollectionDef[],
     /** 当前打开的文集的文章列表，键为文集 id */
-    posts: {} as Record<string, CollectionPostMeta[]>,
-    loaded: false
+    posts: {} as Record<string, CollectionPostMeta[]>
   }),
   actions: {
     async load(): Promise<void> {
       this.defs = await window.api.listCollections()
-      this.loaded = true
     },
     /** 找不到时返回 undefined（文集可能已被删除） */
     def(id: string): CollectionDef | undefined {

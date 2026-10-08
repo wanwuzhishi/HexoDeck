@@ -31,10 +31,6 @@ export function notifyHidden(): void {
   })
 }
 
-export function getTray(): Tray | null {
-  return tray
-}
-
 /** 供窗口恢复时聚焦 */
 export function focusWindow(win: BrowserWindow): void {
   if (win.isMinimized()) win.restore()

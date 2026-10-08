@@ -1,6 +1,8 @@
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import matter from 'gray-matter'
+import type { SiteStats, StatCountItem, StatMonthPoint } from '@shared/ipc'
+import { MD_EXT, toStringList } from './content'
 
 /** 单篇统计样本 */
 interface PostSample {
@@ -17,54 +19,6 @@ export interface CountItem {
   name: string
   count: number
 }
-
-export interface MonthPoint {
-  /** YYYY-MM */
-  month: string
-  count: number
-  words: number
-}
-
-export interface YearPoint {
-  year: string
-  count: number
-  words: number
-}
-
-export interface SiteStats {
-  /** 总量 */
-  postCount: number
-  draftCount: number
-  totalWords: number
-  totalChars: number
-  /** 平均每篇字数（正式文章） */
-  avgWords: number
-  /** 最长/最短文章 */
-  longest: { title: string; words: number } | null
-  shortest: { title: string; words: number } | null
-  /** 标签与分类 */
-  tagCount: number
-  categoryCount: number
-  topTags: CountItem[]
-  topCategories: CountItem[]
-  /** 时间维度 */
-  firstPostDate: string | null
-  lastPostDate: string | null
-  /** 写作天数（有文章发布的去重日期数） */
-  activeDays: number
-  busiestDay: { date: string; count: number } | null
-  byYear: YearPoint[]
-  /** 最近 12 个月趋势 */
-  byMonth: MonthPoint[]
-  /** 本周/本月新增 */
-  thisWeek: number
-  thisMonth: number
-  /** 未分类/未打标签的文章数 */
-  uncategorized: number
-  untagged: number
-}
-
-const MD_EXT = /\.md$/i
 
 /** 统计用的字符数：中英文都计入（去空白），比 hexo 的 wordCount 更适合中文博客 */
 function countChars(content: string): number {
@@ -117,8 +71,8 @@ async function readSamples(siteDir: string): Promise<PostSample[]> {
         samples.push({
           title: String(data.title ?? name.replace(MD_EXT, '')),
           date: Number.isNaN(date.getTime()) ? null : date,
-          tags: toList(data.tags),
-          categories: toList(data.categories),
+          tags: toStringList(data.tags),
+          categories: toStringList(data.categories),
           words: countWords(parsed.content),
           chars: countChars(parsed.content),
           kind
@@ -131,13 +85,7 @@ async function readSamples(siteDir: string): Promise<PostSample[]> {
   return samples
 }
 
-function toList(v: unknown): string[] {
-  if (Array.isArray(v)) return v.map(String)
-  if (v == null || v === '') return []
-  return [String(v)]
-}
-
-function topN(map: Map<string, number>, n: number): CountItem[] {
+function topN(map: Map<string, number>, n: number): StatCountItem[] {
   return [...map.entries()]
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
@@ -202,7 +150,7 @@ export async function collectStats(siteDir: string): Promise<SiteStats> {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
   // 最近 12 个月（含空月份，便于画连续趋势）
-  const byMonth: MonthPoint[] = []
+  const byMonth: StatMonthPoint[] = []
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const key = monthKey(d)

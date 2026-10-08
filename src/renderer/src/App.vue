@@ -683,8 +683,7 @@ watch(
   flex-direction: column;
 }
 
-/* 仅编辑器页（.editor-page）撑满 .main；内容流式的 .page 页面保持自然高度滚动 */
-/* 内容流式的 .page 页面保持自然高度滚动 */
+/* 内容流式的 .page 页面保持自然高度滚动；仅编辑器页撑满 .main */
 .main > :deep(.page) {
   flex: none;
 }

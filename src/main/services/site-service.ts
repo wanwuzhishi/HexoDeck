@@ -5,6 +5,9 @@ import { load as loadYaml } from 'js-yaml'
 import type { SiteInfo } from '@shared/ipc'
 import { listPosts } from './post-service'
 import { findSiteIcon } from './asset-service'
+import { SCAFFOLD_BARE, SCAFFOLD_WITH_TAGS, formatDate } from './content'
+
+export { formatDate } from './content'
 
 /** 站点图标信息：绝对路径 + 供 <img> 使用的 file:// 地址（带 mtime 破缓存） */
 async function readIcon(siteDir: string): Promise<{ iconPath?: string; iconUrl?: string }> {
@@ -52,29 +55,6 @@ export async function openSite(sitePath: string): Promise<SiteInfo> {
     ...(await readIcon(dir))
   }
 }
-
-const SCAFFOLD_POST = `---
-title: {{ title }}
-date: {{ date }}
-tags:
----
-
-`
-
-const SCAFFOLD_DRAFT = `---
-title: {{ title }}
-date: {{ date }}
-tags:
----
-
-`
-
-const SCAFFOLD_PAGE = `---
-title: {{ title }}
-date: {{ date }}
----
-
-`
 
 const HELLO_WORLD = `---
 title: Hello World
@@ -217,18 +197,13 @@ export async function createSite(name: string, parentDir: string): Promise<strin
   await fs.mkdir(join(dir, 'themes'), { recursive: true })
   await fs.writeFile(join(dir, '_config.yml'), configYaml(name), 'utf8')
   await fs.writeFile(join(dir, 'package.json'), sitePackageJson(name), 'utf8')
-  await fs.writeFile(join(dir, 'scaffolds', 'post.md'), SCAFFOLD_POST, 'utf8')
-  await fs.writeFile(join(dir, 'scaffolds', 'draft.md'), SCAFFOLD_DRAFT, 'utf8')
-  await fs.writeFile(join(dir, 'scaffolds', 'page.md'), SCAFFOLD_PAGE, 'utf8')
+  await fs.writeFile(join(dir, 'scaffolds', 'post.md'), SCAFFOLD_WITH_TAGS, 'utf8')
+  await fs.writeFile(join(dir, 'scaffolds', 'draft.md'), SCAFFOLD_WITH_TAGS, 'utf8')
+  await fs.writeFile(join(dir, 'scaffolds', 'page.md'), SCAFFOLD_BARE, 'utf8')
   await fs.writeFile(
     join(dir, 'source', '_posts', 'hello-world.md'),
     HELLO_WORLD.replace('{{ date }}', now),
     'utf8'
   )
   return dir
-}
-
-export function formatDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }

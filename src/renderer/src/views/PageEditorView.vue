@@ -519,12 +519,6 @@ onBeforeUnmount(() => {
   word-break: break-all;
 }
 
-.param-warn {
-  font-size: 12px;
-  color: var(--warn);
-  line-height: 1.5;
-}
-
 .param-ok {
   font-size: 12px;
   color: var(--ok);

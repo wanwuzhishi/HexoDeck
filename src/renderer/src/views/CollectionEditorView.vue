@@ -17,6 +17,7 @@ import {
   type CustomFieldType
 } from '../composables/customFields'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import CustomFieldCard from '../components/CustomFieldCard.vue'
 import type { CollectionPostDetail } from '@shared/ipc'
 
 const route = useRoute()
@@ -582,32 +583,6 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
-.custom-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 8px 10px;
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
-  background: var(--accent-soft);
-}
-
-.custom-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.custom-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-1);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .add-param-btn {
   margin-top: 8px;
 }
@@ -687,7 +662,6 @@ onBeforeUnmount(() => {
   color: var(--accent);
 }
 
-/* 添加参数弹窗 */
 /* 参数类型选择行（弹窗内） */
 .field-type-row {
   display: flex;
@@ -699,11 +673,6 @@ onBeforeUnmount(() => {
 
 .switch-values {
   margin-top: 10px;
-}
-
-/* 开关式参数卡片：勾选框与卡片内边距协调 */
-.custom-item :deep(.n-checkbox) {
-  margin: 2px 0;
 }
 
 .field-inputs {

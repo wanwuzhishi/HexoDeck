@@ -1,13 +1,12 @@
 import { promises as fs } from 'fs'
 import { existsSync } from 'fs'
-import { basename, join, relative, resolve, sep } from 'path'
+import { join, relative, resolve, sep } from 'path'
 import matter from 'gray-matter'
 import { load as loadYaml } from 'js-yaml'
 import type { PageCreateOptions, PageDetail, PageMeta, PagePatch } from '@shared/ipc'
-import { formatDate } from './site-service'
+import { MD_EXT, formatDate, titleFrom, toDate } from './content'
 import { countWords } from './stats-service'
 
-const MD_EXT = /\.md$/i
 /** 递归扫描时跳过的目录名 */
 const SKIP_DIRS = new Set(['node_modules', '.git', '.github', '.deploy_git'])
 
@@ -34,11 +33,6 @@ function toId(siteDir: string, absPath: string): string {
   return relative(resolve(sourceDir(siteDir)), absPath).split(sep).join('/')
 }
 
-function toDate(v: unknown, mtimeMs?: number): string {
-  if (v != null) return v instanceof Date ? formatDate(v) : String(v)
-  return mtimeMs != null ? formatDate(new Date(mtimeMs)) : ''
-}
-
 function metaFrom(
   id: string,
   content: string,
@@ -47,7 +41,7 @@ function metaFrom(
 ): PageMeta {
   return {
     id,
-    title: String(data.title ?? basename(id).replace(MD_EXT, '')),
+    title: titleFrom(id, data),
     date: toDate(data.date, mtimeMs),
     wordCount: countWords(content)
   }
@@ -163,7 +157,7 @@ export async function createPage(siteDir: string, options: PageCreateOptions): P
 }
 
 /** 解析 front-matter YAML：空内容返回空对象；非对象或语法错误时抛出可读错误 */
-export function parseYamlObject(text: string): Record<string, unknown> {
+function parseYamlObject(text: string): Record<string, unknown> {
   if (!text.trim()) return {}
   let parsed: unknown
   try {

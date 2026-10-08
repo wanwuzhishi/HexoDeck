@@ -1,12 +1,11 @@
 import { promises as fs } from 'fs'
 import { existsSync } from 'fs'
-import { basename, join, relative, resolve, sep } from 'path'
+import { join, relative, resolve, sep } from 'path'
 import matter from 'gray-matter'
 import type { CollectionDef, CollectionPostDetail, CollectionPostMeta, CollectionPostPatch } from '@shared/ipc'
-import { formatDate } from './site-service'
+import { MD_EXT, formatDate, sanitizeTitle, titleFrom, toDate } from './content'
 import { countWords } from './stats-service'
 
-const MD_EXT = /\.md$/i
 const SKIP_DIRS = new Set(['node_modules', '.git'])
 
 /** 解析文集目录：必须在站点根目录内（防穿越），返回绝对路径 */
@@ -34,11 +33,6 @@ function toId(collDir: string, absPath: string): string {
   return relative(resolve(collDir), absPath).split(sep).join('/')
 }
 
-function toDate(v: unknown, mtimeMs?: number): string {
-  if (v != null) return v instanceof Date ? formatDate(v) : String(v)
-  return mtimeMs != null ? formatDate(new Date(mtimeMs)) : ''
-}
-
 function metaFrom(
   id: string,
   content: string,
@@ -47,7 +41,7 @@ function metaFrom(
 ): CollectionPostMeta {
   return {
     id,
-    title: String(data.title ?? basename(id).replace(MD_EXT, '')),
+    title: titleFrom(id, data),
     date: toDate(data.date, mtimeMs),
     wordCount: countWords(content)
   }
@@ -110,15 +104,6 @@ export async function readCollectionPost(
     content: parsed.content,
     frontMatter: data
   }
-}
-
-function sanitizeTitle(title: string): string {
-  const cleaned = title
-    .trim()
-    .replace(/[\\/:*?"<>|\r\n\t]+/g, '')
-    .replace(/\s+/g, '-')
-    .slice(0, 80)
-  return cleaned || 'untitled'
 }
 
 export async function createCollectionPost(

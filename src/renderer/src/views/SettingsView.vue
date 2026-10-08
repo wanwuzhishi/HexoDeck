@@ -25,9 +25,10 @@ import { useSiteStore } from '../stores/site'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import { message } from '../composables/message'
+import { useSiteIcon } from '../composables/siteIcon'
 import CodeEditor from '../components/CodeEditor.vue'
 import appIcon from '../assets/app-icon.png'
-import type { AppInfo, ConfigPathInfo, ConfigPathKind, PluginInfo, SiteInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
+import type { AppInfo, ConfigPathInfo, ConfigPathKind, PluginInfo, ThemeConfigFile, ThemeInfo } from '@shared/ipc'
 
 const site = useSiteStore()
 const ws = useWorkspaceStore()
@@ -53,84 +54,12 @@ watch(
 const loading = ref(false)
 
 // ---------- 站点图标（写入站点 source/，随站点走） ----------
-const iconBusy = ref(false)
-const iconDragActive = ref(false)
-
-/** 无图标时用站点名首字占位 */
-const siteInitial = computed(() => {
-  const name = site.site?.title || site.site?.name || 'H'
-  return name.trim().charAt(0).toUpperCase()
-})
-
-/** 后端回传新的 SiteInfo，替换后头像立即刷新 */
-function applyIconResult(r: { ok: boolean; error?: string; data?: SiteInfo }): void {
-  if (r.ok && r.data) {
-    site.site = r.data
-    message.success(r.data.iconPath ? '站点图标已更新' : '已移除站点图标')
-  } else if (r.error && r.error !== 'canceled') {
-    message.error(r.error)
-  }
-}
+const { siteInitial, iconBusy, iconDragActive, pickIcon: pickSiteIcon, clearIcon: clearSiteIcon, onIconDragLeave, onIconDrop } =
+  useSiteIcon('已移除站点图标')
 
 /** 在资源管理器中定位站点图标文件 */
 function revealIcon(): void {
   if (site.site?.iconPath) void window.api.revealInFolder(site.site.iconPath)
-}
-
-async function pickSiteIcon(): Promise<void> {
-  iconBusy.value = true
-  try {
-    applyIconResult(await window.api.pickSiteIcon())
-  } finally {
-    iconBusy.value = false
-  }
-}
-
-async function clearSiteIcon(): Promise<void> {
-  iconBusy.value = true
-  try {
-    applyIconResult(await window.api.clearSiteIcon())
-  } finally {
-    iconBusy.value = false
-  }
-}
-
-const ICON_EXT_RE = /\.(ico|png|jpe?g|svg|webp|gif|bmp)$/i
-
-function onIconDragLeave(e: DragEvent): void {
-  const zone = e.currentTarget as HTMLElement
-  if (!zone.contains(e.relatedTarget as Node)) iconDragActive.value = false
-}
-
-/** 把图片文件读成 base64（IPC 需要纯 base64，去掉 data URL 前缀） */
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = String(reader.result ?? '')
-      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result)
-    }
-    reader.onerror = () => reject(new Error('读取图片失败'))
-    reader.readAsDataURL(file)
-  })
-}
-
-async function onIconDrop(e: DragEvent): Promise<void> {
-  iconDragActive.value = false
-  const file = Array.from(e.dataTransfer?.files ?? [])[0]
-  if (!file) return
-  if (!ICON_EXT_RE.test(file.name)) {
-    message.error('图标仅支持 .ico / .png / .jpg / .svg / .webp / .gif / .bmp 格式')
-    return
-  }
-  iconBusy.value = true
-  try {
-    applyIconResult(await window.api.setSiteIcon(file.name, await fileToBase64(file)))
-  } catch (e) {
-    message.error((e as Error).message)
-  } finally {
-    iconBusy.value = false
-  }
 }
 
 // ---------- 基础配置（reactive：模板中无需判空） ----------

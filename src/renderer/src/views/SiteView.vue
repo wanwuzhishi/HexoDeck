@@ -17,7 +17,9 @@ import { useSiteStore } from '../stores/site'
 import { usePostsStore } from '../stores/posts'
 import { useWorkspaceStore } from '../stores/workspace'
 import { message } from '../composables/message'
-import type { SiteInfo, SiteStats } from '@shared/ipc'
+import { useSiteIcon } from '../composables/siteIcon'
+import { useQuickPreview, useSiteSwitch } from '../composables/siteSwitch'
+import type { SiteStats } from '@shared/ipc'
 
 const siteStore = useSiteStore()
 const posts = usePostsStore()
@@ -27,94 +29,19 @@ const router = useRouter()
 const showCreate = ref(false)
 const creating = ref(false)
 const createForm = ref({ name: '', parentDir: '' })
-const switching = ref('')
-const showSwitch = ref(false)
 const stats = ref<SiteStats | null>(null)
 const statsLoading = ref(false)
+
+const { showSwitch, switching, switchTo } = useSiteSwitch()
+const { quickPreview } = useQuickPreview()
+const { siteInitial, iconBusy, iconDragActive, pickIcon, clearIcon, onIconDragLeave, onIconDrop } =
+  useSiteIcon()
 
 const site = computed(() => siteStore.site)
 
 /** 最近 3 篇（列表已按日期倒序），固定条数以保持卡片高度稳定 */
 const RECENT_LIMIT = 3
 const recentPosts = computed(() => posts.posts.slice(0, RECENT_LIMIT))
-
-/** 站点标识的首字母/首字，用于无图标时的头像位 */
-const siteInitial = computed(() => {
-  const name = site.value?.title || site.value?.name || 'H'
-  return name.trim().charAt(0).toUpperCase()
-})
-
-// ---------- 自定义站点图标 ----------
-const iconBusy = ref(false)
-const iconDragActive = ref(false)
-
-/** 图标写入站点 source/，后端回传新的 SiteInfo，这里直接替换以立即刷新头像 */
-function applyIconResult(r: { ok: boolean; error?: string; data?: SiteInfo }): void {
-  if (r.ok && r.data) {
-    siteStore.site = r.data
-    message.success(r.data.iconPath ? '站点图标已更新' : '已恢复默认图标')
-  } else if (r.error && r.error !== 'canceled') {
-    message.error(r.error)
-  }
-}
-
-async function pickIcon(): Promise<void> {
-  iconBusy.value = true
-  try {
-    applyIconResult(await window.api.pickSiteIcon())
-  } finally {
-    iconBusy.value = false
-  }
-}
-
-async function clearIcon(): Promise<void> {
-  iconBusy.value = true
-  try {
-    applyIconResult(await window.api.clearSiteIcon())
-  } finally {
-    iconBusy.value = false
-  }
-}
-
-const ICON_EXT_RE = /\.(ico|png|jpe?g|svg|webp|gif|bmp)$/i
-
-function onIconDragLeave(e: DragEvent): void {
-  const zone = e.currentTarget as HTMLElement
-  if (!zone.contains(e.relatedTarget as Node)) iconDragActive.value = false
-}
-
-/** 直接把图片拖到头像上即可设为站点图标 */
-async function onIconDrop(e: DragEvent): Promise<void> {
-  iconDragActive.value = false
-  const file = Array.from(e.dataTransfer?.files ?? [])[0]
-  if (!file) return
-  if (!ICON_EXT_RE.test(file.name)) {
-    message.error('图标仅支持 .ico / .png / .jpg / .svg / .webp / .gif / .bmp 格式')
-    return
-  }
-  iconBusy.value = true
-  try {
-    const base64 = await fileToBase64(file)
-    applyIconResult(await window.api.setSiteIcon(file.name, base64))
-  } catch (e) {
-    message.error((e as Error).message)
-  } finally {
-    iconBusy.value = false
-  }
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = String(reader.result ?? '')
-      // 去掉 data URL 前缀，主进程按 base64 直接解码
-      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result)
-    }
-    reader.onerror = () => reject(new Error('读取图片失败'))
-    reader.readAsDataURL(file)
-  })
-}
 
 /** 概览指标（空缺时显示 0，避免卡片高度跳动） */
 const metrics = computed(() => {
@@ -136,25 +63,6 @@ async function loadStats(): Promise<void> {
   } finally {
     statsLoading.value = false
   }
-}
-
-async function switchTo(path: string): Promise<void> {
-  // 点当前站点（或切换进行中）不重复打开
-  if (path === siteStore.site?.path || switching.value) return
-  switching.value = path
-  try {
-    const r = await siteStore.open(path)
-    if (r.ok) message.success('已切换站点')
-    else message.error(r.error ?? '切换失败')
-  } finally {
-    switching.value = ''
-  }
-}
-
-/** 切换弹窗内点击卡片：成功后关闭弹窗 */
-async function switchModalTo(path: string): Promise<void> {
-  await switchTo(path)
-  if (siteStore.site?.path === path) showSwitch.value = false
 }
 
 async function refreshRecents(): Promise<void> {
@@ -200,21 +108,6 @@ async function doCreate(): Promise<void> {
 async function closeSite(): Promise<void> {
   await siteStore.close()
   stats.value = null
-}
-
-async function quickPreview(): Promise<void> {
-  // 预览已运行则直接跳转，否则先启动再进入预览页
-  if (ws.previewUrl) {
-    router.push('/preview')
-    return
-  }
-  const r = await ws.startPreview()
-  if (r.ok) {
-    message.success('预览已启动')
-    router.push('/preview')
-  } else {
-    message.error(r.error ?? '预览启动失败')
-  }
 }
 
 function openPost(id: string): void {
@@ -334,7 +227,8 @@ watch(
             <button class="quick-item" @click="quickPreview">
               <span class="quick-icon">◉</span>
               <span class="quick-label">本地预览</span>
-            </button>            <button class="quick-item" @click="router.push('/settings?tab=theme')">
+            </button>
+            <button class="quick-item" @click="router.push('/settings?tab=theme')">
               <span class="quick-icon">◧</span>
               <span class="quick-label">主题设置</span>
             </button>
@@ -446,7 +340,7 @@ watch(
           class="recent-item clickable"
           :class="{ current: r.path === site?.path, busy: switching === r.path }"
           :title="r.path === site?.path ? '当前站点' : `点击切换到 ${r.name}`"
-          @click="switchModalTo(r.path)"
+          @click="switchTo(r.path)"
         >
           <div class="r-main">
             <n-space align="center" :size="8">

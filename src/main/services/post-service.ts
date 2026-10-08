@@ -3,12 +3,19 @@ import { existsSync } from 'fs'
 import { basename, join } from 'path'
 import matter from 'gray-matter'
 import type { PostDetail, PostKind, PostMeta, PostPatch, SearchHit } from '@shared/ipc'
-import { formatDate } from './site-service'
+import {
+  MD_EXT,
+  SCAFFOLD_WITH_TAGS,
+  formatDate,
+  sanitizeTitle,
+  titleFrom,
+  toDate,
+  toStringList
+} from './content'
 import { countWords } from './stats-service'
 
 const POSTS_DIR = '_posts'
 const DRAFTS_DIR = '_drafts'
-const MD_EXT = /\.md$/i
 
 function sourceDir(siteDir: string, kind: PostKind): string {
   return join(siteDir, 'source', kind === 'post' ? POSTS_DIR : DRAFTS_DIR)
@@ -23,12 +30,6 @@ function idToPath(siteDir: string, id: string): string {
 
 function pathToId(kind: PostKind, filename: string): string {
   return `${kind === 'post' ? POSTS_DIR : DRAFTS_DIR}/${filename}`
-}
-
-function toTags(v: unknown): string[] {
-  if (Array.isArray(v)) return v.map(String)
-  if (v == null || v === '') return []
-  return [String(v)]
 }
 
 /** 分类可能是嵌套数组（多级分类），扁平化为一层显示 */
@@ -51,20 +52,13 @@ function metaFrom(
   mtimeMs?: number
 ): PostMeta {
   // front-matter 无 date 时回退到文件修改时间（与 hexo 生成行为一致）
-  const date =
-    data.date != null
-      ? data.date instanceof Date
-        ? formatDate(data.date)
-        : String(data.date)
-      : mtimeMs != null
-        ? formatDate(new Date(mtimeMs))
-        : ''
+  const date = toDate(data.date, mtimeMs)
   return {
     id,
     kind,
-    title: String(data.title ?? basename(id).replace(MD_EXT, '')),
+    title: titleFrom(id, data),
     date,
-    tags: toTags(data.tags),
+    tags: toStringList(data.tags),
     categories: toCategories(data.categories),
     wordCount: countWords(content)
   }
@@ -124,15 +118,6 @@ export async function readPost(siteDir: string, id: string): Promise<PostDetail>
   }
 }
 
-function sanitizeTitle(title: string): string {
-  const cleaned = title
-    .trim()
-    .replace(/[\\/:*?"<>|\r\n\t]+/g, '')
-    .replace(/\s+/g, '-')
-    .slice(0, 80)
-  return cleaned || 'untitled'
-}
-
 export async function createPost(siteDir: string, kind: PostKind, title: string): Promise<PostMeta> {
   const base = sanitizeTitle(title)
   const dir = sourceDir(siteDir, kind)
@@ -150,7 +135,7 @@ export async function createPost(siteDir: string, kind: PostKind, title: string)
   try {
     body = await fs.readFile(scaffoldPath, 'utf8')
   } catch {
-    body = kind === 'draft' ? SCAFFOLD_FALLBACK : SCAFFOLD_FALLBACK
+    body = SCAFFOLD_WITH_TAGS
   }
   const content = body
     .replace(/\{\{\s*title\s*\}\}/g, title)
@@ -167,14 +152,6 @@ export async function createPost(siteDir: string, kind: PostKind, title: string)
     parsed.data as Record<string, unknown>
   )
 }
-
-const SCAFFOLD_FALLBACK = `---
-title: {{ title }}
-date: {{ date }}
-tags:
----
-
-`
 
 export async function savePost(siteDir: string, id: string, patch: PostPatch): Promise<void> {
   const filePath = idToPath(siteDir, id)
